@@ -92,6 +92,10 @@ default setup 执行；本地单元测试不能替代它。
 Dependabot PR 的生成文件同步由 `.github/workflows/dependabot-autofix.yml`
 自动处理；发布前仍应确认 `THIRD_PARTY_NOTICES.md` 与 `go.mod`/`go.sum` 一致。
 
+发布包的独立消费验证由 `.github/workflows/consumer-smoke.yml` 每周执行，也可手动
+dispatch。它在空模块中获取 `github.com/plinth-go/plinth@latest`，构建最小应用并向
+`/hello/Ada` 发起真实 HTTP 请求，用于发现 tag、module path、Go proxy 或发布包结构问题。
+
 ## 发布步骤
 
 1. 确认版本号和 `CHANGELOG.md` 与公开 API diff 一致。
