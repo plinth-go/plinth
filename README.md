@@ -156,8 +156,9 @@ make fmt
 make release-check
 ```
 
-`make release-check` 包含文档/API 新鲜度、路由与 OpenAPI 契约、普通测试、vet、build、
-完整 `-race` 测试和两个 fuzz 目标。发布还要求参考应用通过同一组 gate，并按
+`make release-check` 包含文档/API 新鲜度、路由与 OpenAPI 契约、workflow lint、普通测试、
+vet、build、完整 `-race` 测试、两个 fuzz 目标，以及 `govulncheck`。发布还要求参考应用
+通过同一组 gate，并按
 [`SECURITY.md`](SECURITY.md) 复核 TLS/代理、静态文件、上传、CORS、认证/授权、CSRF、
 session、限流和 WebSocket 部署边界。
 

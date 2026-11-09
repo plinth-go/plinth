@@ -55,8 +55,9 @@ make release-check
 ```
 
 `make release-check` includes API/documentation freshness checks, third-party
-license compatibility, the regular test suite, `go vet`, both binary builds,
-the full race suite, and both fuzz targets.
+license compatibility, GitHub Actions workflow linting, the regular test suite,
+`go vet`, both binary builds, the full race suite, both fuzz targets, and
+`govulncheck`.
 
 ## Dependency updates and generated files
 
