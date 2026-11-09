@@ -63,9 +63,10 @@ make fmt
 make release-check
 ```
 
-并用真实 server 复核 TLS/代理部署、静态文件根目录、上传路由的 body 限制、CORS 是否
-包在 router 外层、认证/授权/CSRF/session 中间件顺序、Secure cookie 和 WebSocket 同源
-策略。与第三方依赖相关的漏洞扫描应在发布流水线中补充，不能仅依赖框架单元测试。
+`make release-check` 还会运行 `actionlint` 和 `govulncheck`。仓库启用的 CodeQL default
+setup 负责持续代码扫描。还应使用真实 server 复核 TLS/代理部署、静态文件根目录、上传
+路由的 body 限制、CORS 是否包在 router 外层、认证/授权/CSRF/session 中间件顺序、
+Secure cookie 和 WebSocket 同源策略。漏洞扫描不能替代这些部署边界复核或框架单元测试。
 
 发现安全问题时，请提供最小复现、受影响版本/commit、攻击前提和可能的缓解方式；不要在
 公开 issue 中粘贴真实凭据或生产数据。

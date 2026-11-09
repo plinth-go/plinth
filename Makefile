@@ -1,9 +1,11 @@
 GO ?= go
 GOFMT ?= gofmt
 GO_LICENSES_VERSION ?= v1.6.0
+ACTIONLINT_VERSION ?= v1.7.12
+GOVULNCHECK_VERSION ?= v1.9.0
 ALLOWED_LICENSES ?= Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,BSL-1.0,Unlicense
 
-.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz api-check api-update race license-check license-update release-check run clean
+.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
 
 all: generate fmt check test vet build
 
@@ -42,7 +44,7 @@ fuzz:
 race:
 	$(GO) test -race ./... -count=1
 
-release-check: check test vet build race fuzz license-check
+release-check: check lint-workflows test vet build race fuzz license-check vulncheck
 
 api-check:
 	$(GO) test ./internal/apicheck -run TestPublicAPISurface -count=1
@@ -55,6 +57,12 @@ license-check:
 
 license-update:
 	GO="$(GO)" GO_LICENSES_VERSION="$(GO_LICENSES_VERSION)" ./scripts/update-third-party-notices.sh
+
+lint-workflows:
+	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) .github/workflows/*.yml
+
+vulncheck:
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 build: check
 	mkdir -p bin

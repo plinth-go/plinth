@@ -58,8 +58,9 @@ make fmt
 make release-check
 ```
 
-`make release-check` 包含文档/API 新鲜度、路由与 OpenAPI 契约检查、普通测试、vet、
-build、完整 `-race` 测试，以及两个 5 秒 fuzz 运行。若本次发布包含参考应用，再验证：
+`make release-check` 包含文档/API 新鲜度、路由与 OpenAPI 契约检查、GitHub Actions
+workflow lint、普通测试、vet、build、完整 `-race` 测试、两个 5 秒 fuzz 运行，以及
+`govulncheck`。若本次发布包含参考应用，再验证：
 
 ```sh
 cd ../plinth-example
@@ -82,7 +83,8 @@ go test -race ./... -count=1
 - WebSocket 同源策略，以及显式跨域时的鉴权边界。
 - 关闭公开 OpenAPI/readiness，或将其挂到授权路由组。
 
-第三方依赖漏洞扫描应在发布流水线或目标 CI 中执行；本地单元测试不能替代它。
+第三方依赖漏洞扫描由 `make release-check` 中的 `govulncheck` 和仓库启用的 CodeQL
+default setup 执行；本地单元测试不能替代它。
 第三方依赖的许可证兼容性由 `make license-check` 检查；公开清单由
 `make license-update` 生成到 `THIRD_PARTY_NOTICES.md`，发布前应与 `go.mod`/`go.sum`
 的变更一起 review。
