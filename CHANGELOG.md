@@ -57,11 +57,9 @@ after the release checklist passes and publication is explicitly authorized.
   cross-field `validate` rules, Redis version/strategy selection, and the new
   optional dependency boundaries.
 
-## [1.0.0] - 2026-11-08
+### Initial stable baseline
 
-First stable release of the Plinth application kernel.
-
-### Added
+These capabilities were present in the first public repository import:
 
 - Typed `net/http` routing over `http.ServeMux`, including path, query, header,
   and strict JSON body binding, validation, RFC 9457 problems, automatic slug
