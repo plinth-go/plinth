@@ -61,7 +61,7 @@ jobs:
 
       - name: Check out failed commit
         if: steps.pr.outputs.run == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 1
@@ -96,7 +96,7 @@ jobs:
 
       - name: Set up Go
         if: steps.pr.outputs.run == 'true' && steps.current.outputs.skip != 'true' && steps.guard.outputs.skip != 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: "1.27.x"
           cache: true
