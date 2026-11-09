@@ -1,4 +1,4 @@
-package jobs
+package postgres
 
 import (
 	"context"
@@ -15,9 +15,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/plinth-go/plinth/platform/jobs"
+	"github.com/plinth-go/plinth/platform/jobs/jobutil"
 	"github.com/plinth-go/plinth/platform/jobs/migrations"
 	"github.com/plinth-go/plinth/platform/migrate"
-	"github.com/plinth-go/plinth/platform/postgres"
+	migratepostgres "github.com/plinth-go/plinth/platform/migrate/postgres"
+	pgcomponent "github.com/plinth-go/plinth/platform/postgres"
 )
 
 func TestIntegrationJobLifecycle(t *testing.T) {
@@ -25,7 +28,7 @@ func TestIntegrationJobLifecycle(t *testing.T) {
 	defer cancel()
 	store := newIntegrationStore(t)
 
-	job, err := store.Enqueue(ctx, "test.echo", map[string]string{"message": "hello"}, WithMaxAttempts(2))
+	job, err := store.Enqueue(ctx, "test.echo", map[string]string{"message": "hello"}, jobs.WithMaxAttempts(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +67,7 @@ func TestIntegrationJobRetryInterruptAndStaleRecovery(t *testing.T) {
 		defer cancel()
 		store := newIntegrationStore(t)
 
-		retryJob, err := store.Enqueue(ctx, "test.retry", map[string]string{"message": "hello"}, WithMaxAttempts(2))
+		retryJob, err := store.Enqueue(ctx, "test.retry", map[string]string{"message": "hello"}, jobs.WithMaxAttempts(2))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +171,7 @@ func TestIntegrationJobRetryInterruptAndStaleRecovery(t *testing.T) {
 		defer cancel()
 		store := newIntegrationStore(t)
 
-		stale, err := store.Enqueue(ctx, "test.stale.exhausted", nil, WithMaxAttempts(1))
+		stale, err := store.Enqueue(ctx, "test.stale.exhausted", nil, jobs.WithMaxAttempts(1))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,13 +235,13 @@ func TestIntegrationJobRetryInterruptAndStaleRecovery(t *testing.T) {
 		}
 
 		oldLease := old.Lease("worker-old")
-		if err := store.MarkSucceeded(ctx, oldLease); !errors.Is(err, ErrLeaseLost) {
+		if err := store.MarkSucceeded(ctx, oldLease); !errors.Is(err, jobs.ErrLeaseLost) {
 			t.Fatalf("old success error = %v", err)
 		}
-		if err := store.MarkFailed(ctx, oldLease, errors.New("late failure"), time.Now()); !errors.Is(err, ErrLeaseLost) {
+		if err := store.MarkFailed(ctx, oldLease, errors.New("late failure"), time.Now()); !errors.Is(err, jobs.ErrLeaseLost) {
 			t.Fatalf("old failure error = %v", err)
 		}
-		if err := store.MarkInterrupted(ctx, oldLease, context.Canceled); !errors.Is(err, ErrLeaseLost) {
+		if err := store.MarkInterrupted(ctx, oldLease, context.Canceled); !errors.Is(err, jobs.ErrLeaseLost) {
 			t.Fatalf("old interrupt error = %v", err)
 		}
 		if err := store.MarkSucceeded(ctx, current.Lease("worker-current")); err != nil {
@@ -259,7 +262,7 @@ func TestIntegrationMarkSucceededReplayIsIdempotent(t *testing.T) {
 	defer cancel()
 	store := newIntegrationStore(t)
 
-	job, err := store.Enqueue(ctx, "test.echo", map[string]string{"message": "hello"}, WithMaxAttempts(2))
+	job, err := store.Enqueue(ctx, "test.echo", map[string]string{"message": "hello"}, jobs.WithMaxAttempts(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,8 +283,8 @@ func TestIntegrationMarkSucceededReplayIsIdempotent(t *testing.T) {
 
 	wrongAttempt := lease
 	wrongAttempt.Attempt++
-	if err := store.MarkSucceeded(ctx, wrongAttempt); !errors.Is(err, ErrLeaseLost) {
-		t.Fatalf("wrong-attempt replay error = %v, want ErrLeaseLost", err)
+	if err := store.MarkSucceeded(ctx, wrongAttempt); !errors.Is(err, jobs.ErrLeaseLost) {
+		t.Fatalf("wrong-attempt replay error = %v, want jobs.ErrLeaseLost", err)
 	}
 }
 
@@ -324,11 +327,11 @@ func TestIntegrationLeaseTokenSeparatesReusedAttempts(t *testing.T) {
 		t.Fatal("reused attempt received the previous lease token")
 	}
 
-	if err := store.MarkSucceeded(ctx, firstLease); !errors.Is(err, ErrLeaseLost) {
-		t.Fatalf("stale success error = %v, want ErrLeaseLost", err)
+	if err := store.MarkSucceeded(ctx, firstLease); !errors.Is(err, jobs.ErrLeaseLost) {
+		t.Fatalf("stale success error = %v, want jobs.ErrLeaseLost", err)
 	}
-	if err := store.MarkInterrupted(ctx, firstLease, context.Canceled); !errors.Is(err, ErrLeaseLost) {
-		t.Fatalf("stale interruption error = %v, want ErrLeaseLost", err)
+	if err := store.MarkInterrupted(ctx, firstLease, context.Canceled); !errors.Is(err, jobs.ErrLeaseLost) {
+		t.Fatalf("stale interruption error = %v, want jobs.ErrLeaseLost", err)
 	}
 	if err := store.MarkSucceeded(ctx, secondLease); err != nil {
 		t.Fatalf("current success acknowledgement = %v", err)
@@ -341,7 +344,7 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 	store := newIntegrationStore(t)
 
 	t.Run("failed", func(t *testing.T) {
-		job, err := store.Enqueue(ctx, "test.failed", nil, WithMaxAttempts(2))
+		job, err := store.Enqueue(ctx, "test.failed", nil, jobs.WithMaxAttempts(2))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -360,8 +363,8 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 		}
 		wrongAttempt := lease
 		wrongAttempt.Attempt++
-		if err := store.MarkFailed(ctx, wrongAttempt, cause, retryAt); !errors.Is(err, ErrLeaseLost) {
-			t.Fatalf("wrong-attempt failure replay error = %v, want ErrLeaseLost", err)
+		if err := store.MarkFailed(ctx, wrongAttempt, cause, retryAt); !errors.Is(err, jobs.ErrLeaseLost) {
+			t.Fatalf("wrong-attempt failure replay error = %v, want jobs.ErrLeaseLost", err)
 		}
 		got, err := store.Get(ctx, job.ID)
 		if err != nil {
@@ -391,8 +394,8 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 		}
 		wrongAttempt := lease
 		wrongAttempt.Attempt++
-		if err := store.MarkInterrupted(ctx, wrongAttempt, cause); !errors.Is(err, ErrLeaseLost) {
-			t.Fatalf("wrong-attempt interruption replay error = %v, want ErrLeaseLost", err)
+		if err := store.MarkInterrupted(ctx, wrongAttempt, cause); !errors.Is(err, jobs.ErrLeaseLost) {
+			t.Fatalf("wrong-attempt interruption replay error = %v, want jobs.ErrLeaseLost", err)
 		}
 		got, err := store.Get(ctx, job.ID)
 		if err != nil {
@@ -414,7 +417,7 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 		lease := claimed.Lease("worker-large-failure")
-		cause := errors.New(strings.Repeat("错", maxJobErrorBytes))
+		cause := errors.New(strings.Repeat("错", jobutil.MaxErrorBytes))
 		retryAt := time.Now().Add(time.Second)
 		if err := store.MarkFailed(ctx, lease, cause, retryAt); err != nil {
 			t.Fatal(err)
@@ -426,7 +429,7 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.LastError == nil || len(*got.LastError) > maxJobErrorBytes || !strings.HasSuffix(*got.LastError, truncatedJobErrorSuffix) {
+		if got.LastError == nil || len(*got.LastError) > jobutil.MaxErrorBytes || !strings.HasSuffix(*got.LastError, jobutil.TruncatedErrorSuffix) {
 			t.Fatalf("stored last_error = %#v", got.LastError)
 		}
 	})
@@ -461,7 +464,7 @@ func TestIntegrationSchedulesAndWorker(t *testing.T) {
 	defer cancel()
 	store := newIntegrationStore(t)
 
-	if err := store.UpsertSchedule(ctx, Schedule{
+	if err := store.UpsertSchedule(ctx, jobs.Schedule{
 		Name:     "test-schedule",
 		Kind:     "test.schedule",
 		Payload:  map[string]int{"limit": 1},
@@ -497,9 +500,9 @@ func TestIntegrationSchedulesAndWorker(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	registry := NewRegistry()
+	registry := jobs.NewRegistry()
 	received := make(chan string, 1)
-	if err := Register(registry, "test.worker", func(_ context.Context, payload struct {
+	if err := jobs.Register(registry, "test.worker", func(_ context.Context, payload struct {
 		Message string `json:"message"`
 	}) error {
 		received <- payload.Message
@@ -507,7 +510,7 @@ func TestIntegrationSchedulesAndWorker(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	worker := NewWorker(store, registry, logger, WorkerConfig{
+	worker := jobs.NewWorker(store, registry, logger, jobs.WorkerConfig{
 		Concurrency:  1,
 		PollInterval: 10 * time.Millisecond,
 		JobTimeout:   time.Second,
@@ -545,15 +548,15 @@ func TestIntegrationNilPayloadRunsTypedZeroValueHandler(t *testing.T) {
 	store := newIntegrationStore(t)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	registry := NewRegistry()
+	registry := jobs.NewRegistry()
 	received := make(chan struct{}, 1)
-	if err := Register(registry, "test.empty", func(context.Context, struct{}) error {
+	if err := jobs.Register(registry, "test.empty", func(context.Context, struct{}) error {
 		received <- struct{}{}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	worker := NewWorker(store, registry, logger, WorkerConfig{
+	worker := jobs.NewWorker(store, registry, logger, jobs.WorkerConfig{
 		Concurrency:  1,
 		PollInterval: 10 * time.Millisecond,
 		JobTimeout:   time.Second,
@@ -590,7 +593,7 @@ func TestIntegrationConcurrentScheduleDispatchIsExactlyOncePerTick(t *testing.T)
 	defer cancel()
 	store := newIntegrationStore(t)
 
-	if err := store.UpsertSchedule(ctx, Schedule{
+	if err := store.UpsertSchedule(ctx, jobs.Schedule{
 		Name:     "test-concurrent-schedule",
 		Kind:     "test.concurrent-schedule",
 		Interval: time.Minute,
@@ -656,9 +659,9 @@ func TestIntegrationReconcileSchedules(t *testing.T) {
 	defer cancel()
 	store := newIntegrationStore(t)
 
-	first := Schedule{Name: "first", Kind: "test.first", Payload: map[string]int{"limit": 1}, Interval: time.Minute}
-	second := Schedule{Name: "second", Kind: "test.second", Payload: map[string]int{"limit": 2}, Interval: 2 * time.Minute}
-	if err := store.ReconcileSchedules(ctx, []Schedule{first, second}); err != nil {
+	first := jobs.Schedule{Name: "first", Kind: "test.first", Payload: map[string]int{"limit": 1}, Interval: time.Minute}
+	second := jobs.Schedule{Name: "second", Kind: "test.second", Payload: map[string]int{"limit": 2}, Interval: 2 * time.Minute}
+	if err := store.ReconcileSchedules(ctx, []jobs.Schedule{first, second}); err != nil {
 		t.Fatal(err)
 	}
 	var enabled int
@@ -670,7 +673,7 @@ func TestIntegrationReconcileSchedules(t *testing.T) {
 	}
 
 	first.Interval = 3 * time.Minute
-	if err := store.ReconcileSchedules(ctx, []Schedule{first}); err != nil {
+	if err := store.ReconcileSchedules(ctx, []jobs.Schedule{first}); err != nil {
 		t.Fatal(err)
 	}
 	var firstEnabled, secondEnabled bool
@@ -688,7 +691,7 @@ func TestIntegrationReconcileSchedules(t *testing.T) {
 		t.Fatal("undeclared second schedule remained enabled")
 	}
 
-	err := store.ReconcileSchedules(ctx, []Schedule{
+	err := store.ReconcileSchedules(ctx, []jobs.Schedule{
 		first,
 		{Name: "broken", Kind: "test.broken", Payload: make(chan int), Interval: time.Minute},
 	})
@@ -729,7 +732,7 @@ func newIntegrationStore(t *testing.T) *Store {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	postgres, err := postgres.New(ctx, urlWithSchema)
+	postgres, err := pgcomponent.New(ctx, urlWithSchema)
 	if err != nil {
 		admin.Close(ctx)
 		t.Fatal(err)
@@ -738,7 +741,7 @@ func newIntegrationStore(t *testing.T) *Store {
 		admin.Close(ctx)
 		t.Fatal(err)
 	}
-	migrator := migrate.New(urlWithSchema, true, logger,
+	migrator := migratepostgres.New(urlWithSchema, true, logger,
 		migrate.Migration{Name: "jobs_test", FS: migrations.FS()},
 	)
 	if err := migrator.Start(ctx); err != nil {

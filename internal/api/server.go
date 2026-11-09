@@ -29,7 +29,7 @@ type Dependencies struct {
 	Logger    *slog.Logger
 	Postgres  *postgres.Postgres
 	Redis     *redis.Redis
-	Jobs      *jobs.Store
+	Jobs      jobs.Store
 	Registry  *jobs.Registry
 	Worker    *jobs.Worker
 	Scheduler *jobs.Scheduler

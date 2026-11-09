@@ -4,7 +4,6 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -21,11 +20,7 @@ const (
 )
 
 // Store is the failed-job subset used by the admin handler.
-type Store interface {
-	ListFailed(context.Context, int, int) ([]jobs.Job, error)
-	RetryFailed(context.Context, string) (jobs.Job, error)
-	DeleteFailed(context.Context, string) error
-}
+type Store = jobs.AdminStore
 
 // NewHandler returns a JSON handler for failed jobs. Mount it beneath an
 // authenticated prefix; supported routes are GET /jobs/failed,

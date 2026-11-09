@@ -14,7 +14,9 @@ import (
 	"github.com/plinth-go/plinth/logging"
 	"github.com/plinth-go/plinth/platform/jobs"
 	"github.com/plinth-go/plinth/platform/jobs/migrations"
+	jobspostgres "github.com/plinth-go/plinth/platform/jobs/postgres"
 	"github.com/plinth-go/plinth/platform/migrate"
+	migratepostgres "github.com/plinth-go/plinth/platform/migrate/postgres"
 	"github.com/plinth-go/plinth/platform/postgres"
 	"github.com/plinth-go/plinth/platform/redis"
 	"github.com/plinth-go/plinth/runtime"
@@ -66,7 +68,7 @@ func run(ctx context.Context) (err error) {
 		return err
 	}
 
-	store := jobs.NewStore(postgres.Pool())
+	store := jobspostgres.NewStore(postgres.Pool())
 	registry := jobs.NewRegistry()
 	slogLogger := logger.Slog()
 	registerSystemJobs(registry, slogLogger)
@@ -98,7 +100,7 @@ func run(ctx context.Context) (err error) {
 	rt.Add(
 		postgres,
 		redis,
-		migrate.New(cfg.DatabaseURL, cfg.AutoMigrate, slogLogger,
+		migratepostgres.New(cfg.DatabaseURL, cfg.AutoMigrate, slogLogger,
 			migrate.Migration{Name: "plinth", FS: migrations.FS()},
 		),
 		worker,

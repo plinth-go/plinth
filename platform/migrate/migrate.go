@@ -1,6 +1,6 @@
 // Package migrate provides optional Goose database migrations with independent
-// version tables per source. Applications that do not import this package do
-// not compile goose support from Plinth.
+// version tables per source. The package is database-agnostic: callers select
+// a database/sql driver and the matching Goose dialect through Config.
 package migrate
 
 import (
@@ -17,8 +17,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/pressly/goose/v3"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Migration is one independently versioned migration source. Each source gets
@@ -29,12 +27,27 @@ type Migration struct {
 	FS   fs.FS
 }
 
+// Config selects a database/sql driver and Goose dialect for migrations.
+// Applications must import the database/sql driver they name in Driver. The
+// optional per-database adapter packages register common drivers.
+type Config struct {
+	URL             string
+	Enabled         bool
+	Logger          *slog.Logger
+	Driver          string
+	Dialect         goose.Dialect
+	IdentifierLimit int
+}
+
 // Migrator is a single-use component that validates every source provider
 // before applying any migration source.
 type Migrator struct {
 	url        string
 	enabled    bool
 	logger     *slog.Logger
+	driver     string
+	dialect    goose.Dialect
+	limit      int
 	migrations []Migration
 
 	mu      sync.Mutex
@@ -42,13 +55,22 @@ type Migrator struct {
 	closed  bool
 }
 
-// New creates a migration component. Migration sources are applied in order,
-// each with an independent goose version table.
-func New(url string, enabled bool, logger *slog.Logger, sources ...Migration) *Migrator {
-	if logger == nil {
-		logger = slog.Default()
+// NewWithConfig creates a migration component for an explicit database/sql
+// driver and Goose dialect. An IdentifierLimit of zero disables the identifier
+// length preflight for databases that do not impose one.
+func NewWithConfig(cfg Config, sources ...Migration) *Migrator {
+	if cfg.Logger == nil {
+		cfg.Logger = slog.Default()
 	}
-	return &Migrator{url: strings.TrimSpace(url), enabled: enabled, logger: logger, migrations: append([]Migration(nil), sources...)}
+	return &Migrator{
+		url:        strings.TrimSpace(cfg.URL),
+		enabled:    cfg.Enabled,
+		logger:     cfg.Logger,
+		driver:     strings.TrimSpace(cfg.Driver),
+		dialect:    cfg.Dialect,
+		limit:      cfg.IdentifierLimit,
+		migrations: append([]Migration(nil), sources...),
+	}
 }
 
 func (m *Migrator) Name() string { return "migrator" }
@@ -83,6 +105,15 @@ func (m *Migrator) apply(ctx context.Context) error {
 	if len(m.migrations) == 0 {
 		return fmt.Errorf("no migration sources configured")
 	}
+	if m.driver == "" {
+		return fmt.Errorf("migration driver must not be empty")
+	}
+	if m.dialect == "" {
+		return fmt.Errorf("migration dialect must not be empty")
+	}
+	if m.limit < 0 {
+		return fmt.Errorf("migration identifier limit must not be negative")
+	}
 
 	type preparedSource struct {
 		name string
@@ -99,10 +130,10 @@ func (m *Migrator) apply(ctx context.Context) error {
 			return err
 		}
 		table := migrationTableName(name)
-		if len(table) > maxPostgresIdentifierBytes {
+		if m.limit > 0 && len(table) > m.limit {
 			return fmt.Errorf(
-				"migration source name %q produces table %q with %d bytes; PostgreSQL identifiers are limited to %d bytes",
-				name, table, len(table), maxPostgresIdentifierBytes,
+				"migration source name %q produces table %q with %d bytes; database identifiers are limited to %d bytes",
+				name, table, len(table), m.limit,
 			)
 		}
 		if seen[table] {
@@ -118,7 +149,7 @@ func (m *Migrator) apply(ctx context.Context) error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
-	db, err := sql.Open("pgx", m.url)
+	db, err := sql.Open(m.driver, m.url)
 	if err != nil {
 		return fmt.Errorf("open migration database: %w", err)
 	}
@@ -133,7 +164,7 @@ func (m *Migrator) apply(ctx context.Context) error {
 	for _, source := range prepared {
 		table := migrationTableName(source.name)
 		provider, err := goose.NewProvider(
-			goose.DialectPostgres,
+			m.dialect,
 			db,
 			source.fs,
 			goose.WithTableName(table),
@@ -231,8 +262,6 @@ func (m *Migrator) Stop(context.Context) error {
 	m.closed = true
 	return nil
 }
-
-const maxPostgresIdentifierBytes = 63
 
 func migrationTableName(name string) string {
 	var table strings.Builder

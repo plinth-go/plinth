@@ -45,8 +45,8 @@
 - Go 注释自动进入 OpenAPI/Swagger：不手写注解，不运行时读源码。
 - OpenAPI 3.1 文档与内嵌 Swagger UI。
 - OpenAPI 文档按路由注册版本自动失效；先取文档、后注册路由时，下一次取文档会包含新路由。
-- Postgres 持久化后台任务：领取、并发、重试、退避、stale 恢复、优雅停机。
-- 持久化周期调度声明：代码声明、Postgres 保存下一次执行时间。
+- 数据库可插拔的持久化后台任务：核心只定义 Store 契约、worker、scheduler 和 typed payload；Postgres 是内置适配器。
+- 持久化周期调度声明：代码声明，具体数据库适配器保存下一次执行时间。
 - 可选的 Postgres `pgxpool`、Redis `go-redis` 生命周期子包。
 - 可选的 Goose 嵌入式 SQL migration 子包。
 - 可选的 Redis 分布式锁（Lua/WATCH 双策略、版本约束）和幂等键中间件。
@@ -90,8 +90,10 @@ import (
 	// "github.com/plinth-go/plinth/platform/csrf"
 	// "github.com/plinth-go/plinth/platform/csrf/redis"
 	// "github.com/plinth-go/plinth/platform/jobs"
-	// "github.com/plinth-go/plinth/platform/jobs/migrations"
 	// "github.com/plinth-go/plinth/platform/jobs/admin"
+	// "github.com/plinth-go/plinth/platform/jobs/jobutil"
+	// "github.com/plinth-go/plinth/platform/jobs/migrations"
+	// "github.com/plinth-go/plinth/platform/jobs/postgres"
 	// "github.com/plinth-go/plinth/platform/idempotency"
 	// "github.com/plinth-go/plinth/platform/jwt"
 	// "github.com/plinth-go/plinth/platform/oidc"
@@ -100,6 +102,7 @@ import (
 	// "github.com/plinth-go/plinth/platform/observability/prometheus"
 	// "github.com/plinth-go/plinth/platform/observability/otel"
 	// "github.com/plinth-go/plinth/platform/migrate"
+	// "github.com/plinth-go/plinth/platform/migrate/postgres"
 	// "github.com/plinth-go/plinth/platform/postgres"
 	// "github.com/plinth-go/plinth/platform/ratelimit"
 	// "github.com/plinth-go/plinth/platform/ratelimit/redis"
@@ -123,9 +126,11 @@ import (
 | `kernel/uploads` | 无 | 有界、流式 multipart 文件解析与临时文件清理 |
 | `platform/csrf` | 无 | CSRF 中间件与有界内存 store |
 | `platform/csrf/redis` | `go-redis/v9` | 无 Lua 的 Redis CSRF token store |
-| `platform/jobs` | `pgx/v5` | PostgreSQL 持久化任务、worker、scheduler |
-| `platform/jobs/admin` | `pgx/v5`（经由 jobs） | failed job 查看、重试和删除 HTTP handler |
-| `platform/jobs/migrations` | 无 | 随框架发布的任务表 SQL |
+| `platform/jobs` | 无 | 数据库无关的任务/schedule 模型、Store 接口、worker、scheduler |
+| `platform/jobs/jobutil` | 无 | 自定义 Store 适配器复用的 payload 编码、标识符与错误规范化 |
+| `platform/jobs/postgres` | `pgx/v5` | jobs Store 的 PostgreSQL 实现 |
+| `platform/jobs/admin` | 无（经由 jobs 接口） | failed job 查看、重试和删除 HTTP handler |
+| `platform/jobs/migrations` | 无 | 随框架发布的 PostgreSQL 任务表 SQL |
 | `platform/idempotency` | `go-redis/v9` | 内存/Redis 幂等键存储与 HTTP 中间件 |
 | `platform/jwt` | `golang-jwt/jwt/v5` | HMAC/RSA/ECDSA JWT verifier，适配 `kernel/auth` |
 | `platform/oidc` | `go-oidc/v3`、`go-jose/v4` | OIDC discovery、JWKS 轮换与 ID token verifier |
@@ -141,13 +146,14 @@ import (
 | `platform/redis` | `go-redis/v9` | Redis 客户端生命周期 |
 | `platform/session` | `alexedwards/scs/v2` | cookie session 中间件与内存 store |
 | `platform/session/redis` | `alexedwards/scs/v2`、`go-redis/v9` | Redis session store |
-| `platform/migrate` | `goose/v3`、`pgx/v5` | 多 source Goose migration |
+| `platform/migrate` | `goose/v3` | 数据库无关的多 source Goose migrator |
+| `platform/migrate/postgres` | `goose/v3`、`pgx/v5` | PostgreSQL driver 注册与便捷构造器 |
 
 核心包 `app`、`kernel`、`runtime`、`logging`、`utils`、`webui` 是纯 HTTP/进程装配层：`kernel` 只负责 HTTP 入参解析、参数绑定、校验、结构体响应、OpenAPI/Swagger 和流式 helper，不依赖数据库、Redis、任务队列或 Goose。未 import 的可选子包不会参与编译或链接；`internal/depscheck` 用 `go list -deps` 固定核心包与所有 `platform/*` 的边界。
 
 本仓库的 `cmd/plinth` 和 `internal/api` 是带全部能力的参考应用，因此它们会 import 可选平台包；消费者不会 import `internal/*`，最终二进制只由消费者自己的 import 图决定。只 import `kernel`/`runtime` 的应用不会链接 SCS、pgx、Redis、gorilla 或 Goose。
 
-这些子包仍在同一个 module 中，因此发布 tag 和 MVS 版本边界只有一个。Go 1.27 的 module graph pruning 会让最小消费者的 `go.mod`/`go.sum` 只记录实际 import 闭包所需的依赖；`go list -m all` 仍可能列出可选模块，但编译、链接和最终二进制不会包含未 import 的包。只有连模块下载图也要完全隐藏时才需要拆多个 module，这会引入多 tag、多版本兼容和跨模块测试成本，当前首版不值得这样做。`platform/jobs` 是 Postgres 持久化队列，import 它本身就会使用 pgx，这是它的实现前提；只使用 HTTP 核心的应用完全不会带入 pgx。
+这些子包仍在同一个 module 中，因此发布 tag 和 MVS 版本边界只有一个。Go 1.27 的 module graph pruning 会让最小消费者的 `go.mod`/`go.sum` 只记录实际 import 闭包所需的依赖；`go list -m all` 仍可能列出可选模块，但编译、链接和最终二进制不会包含未 import 的包。只有连模块下载图也要完全隐藏时才需要拆多个 module，这会引入多 tag、多版本兼容和跨模块测试成本，当前首版不值得这样做。`platform/jobs` 与 `platform/migrate` 核心层不依赖 pgx；只有显式 import `platform/jobs/postgres` 或 `platform/migrate/postgres` 才会带入 pgx。
 
 ## 版本与发布
 
@@ -312,9 +318,11 @@ kernel/uploads/         可选流式 multipart 解析
 kernel/websocket/       可选 WebSocket 集成（gorilla/websocket）
 platform/csrf/          可选 CSRF 中间件与内存/Redis store
 platform/idempotency/   可选幂等键与 HTTP 中间件
-platform/jobs/          可选 Postgres 任务队列、worker、scheduler（pgx）
+platform/jobs/          可选数据库无关任务队列契约、worker、scheduler
 platform/jobs/admin/    可选 failed-job 运维 handler
-platform/jobs/migrations/ 任务表 SQL，随二进制嵌入
+platform/jobs/jobutil/  自定义 jobs Store 适配器工具包
+platform/jobs/migrations/ PostgreSQL 任务表 SQL，随二进制嵌入
+platform/jobs/postgres/ 可选 jobs PostgreSQL 适配器（pgx）
 platform/jwt/           可选 JWT verifier（golang-jwt）
 platform/oidc/          可选 OIDC/JWKS verifier（go-oidc）
 platform/objectstore/   可选对象存储接口、localfs 与 S3 适配器
@@ -324,7 +332,8 @@ platform/ratelimit/     可选固定窗口限流与内存/Redis limiter
 platform/redis/         可选 Redis 生命周期组件（go-redis）
 platform/redislock/     可选 Redis 分布式锁（go-redis）
 platform/session/       可选 cookie session 与内存/Redis store（scs）
-platform/migrate/       可选 Goose migration 与多源 migrator
+platform/migrate/       可选数据库无关 Goose migration 与多源 migrator
+platform/migrate/postgres/ 可选 PostgreSQL driver 注册与便捷构造器（pgx）
 runtime/                组件启动/停止与 HTTP server
 logging/                终端/文件 slog 输出与生命周期
 utils/                  无状态、确定性的通用小工具
@@ -344,11 +353,11 @@ internal/generated/     go generate 产物，不手改
 | 校验 | `go-playground/validator` | `kernel` | 从 tag 生成 schema，翻译错误 |
 | OpenAPI | 自研窄生成器 | `kernel` | 只覆盖本项目支持的 tag 子集 |
 | Swagger UI | `swaggest/swgui/v5emb` | `kernel` | 内嵌挂载 |
-| Postgres | `jackc/pgx/v5` | `platform/postgres`、`platform/jobs` | 连接池组件、持久化任务 |
+| Postgres | `jackc/pgx/v5` | `platform/postgres`、`platform/jobs/postgres` | 连接池组件、持久化任务适配器 |
 | Redis | `redis/go-redis/v9` | `platform/redis` | 客户端组件 |
 | Redis lock | `redis/go-redis/v9` | `platform/redislock` | 租约、token 所有权、Lua/命令策略 |
-| 迁移 | `pressly/goose/v3` | `platform/migrate` | 嵌入 SQL、启动时调度 |
-| 后台任务 | PostgreSQL | `platform/jobs` | 队列表、领取、重试、调度、停机 |
+| 迁移 | `pressly/goose/v3` | `platform/migrate`、`platform/migrate/postgres` | 驱动/dialect 选择、source 编排、启动时调度 |
+| 后台任务 | 应用选择的数据库 | `platform/jobs`、`platform/jobs/postgres` | Store 契约、领取、重试、调度、停机；Postgres 提供内置存储实现 |
 | WebSocket | `gorilla/websocket` | `kernel/websocket` | 升级、连接登记、停机关闭 |
 | 认证 | 标准库 + 应用 verifier | `kernel/auth`、`platform/jwt`、`platform/oidc` | Bearer 提取、401、Principal context |
 | 授权 | 应用权限源 | `kernel/authz` | 读取路由权限声明、统一 403/500 与日志 |
@@ -723,7 +732,12 @@ readiness check 名称在去除首尾空白后必须唯一；未命名 check 会
 
 ## 后台任务
 
-PG 表结构在 `platform/jobs/migrations/00001_jobs.sql` 和后续增量 migration 中，任务状态：
+`platform/jobs` 定义数据库无关的 `Job`、`Lease`、`Schedule`、`Store`、`WorkerStore`、
+`SchedulerStore` 和 `AdminStore` 契约，并提供 worker/scheduler 生命周期。应用可以
+使用内置的 `platform/jobs/postgres`，也可以在自己的模块里实现同一组接口接入其他数据库。
+
+PostgreSQL 适配器使用 `platform/jobs/migrations/00001_jobs.sql` 和后续增量 migration，
+任务状态：
 
 ```text
 pending -> running -> succeeded
@@ -733,7 +747,7 @@ pending -> running -> succeeded
 
 关键行为：
 
-- 领取使用 `FOR UPDATE SKIP LOCKED`，多实例安全。
+- PostgreSQL 适配器使用 `FOR UPDATE SKIP LOCKED` 领取任务；自定义适配器必须提供等价的并发 claim 与 lease fencing，不能让同一 attempt 被并发执行。
 - worker 启动时立即执行 stale recovery，运行期再按 `StaleAfter/2` 周期执行（限制在 100ms 到 1m 之间）；仍有 attempt 余额的任务回到 pending，已经耗尽 `max_attempts` 的任务直接进入 failed，绝不额外执行一次。这样单个实例崩溃后，无需等待其他进程重启也能回收遗留租约。`RecoverStale` 拒绝非正的 stale 时长，避免把全部 running 任务误判为过期。
 - 任务完成、失败和 interrupted 都带租约围栏；每次 `Claim` 还会生成独立的 `lease_token`，终态写入必须同时匹配 job、worker、attempt 和 token。即使 interrupted 回退了 attempt、下一次领取复用了相同 attempt 数字，旧 worker 的迟到写入也只能得到 `ErrLeaseLost`。被 stale recovery 回收后的旧 worker 同样无法覆盖新 attempt。
 - `WORKER_STALE_AFTER` 必须严格大于 `WORKER_TIMEOUT`，避免正常执行中的任务在自身超时前被重新领取。
@@ -747,16 +761,16 @@ pending -> running -> succeeded
 - `Enqueue` / `Schedule` 在落库前还会用同一严格 JSON 策略检查序列化结果；嵌套 `null`、重复 object key 和尾随值会直接报错，不会留下 worker 必然无法解码的任务。
 - `Enqueue` 遇到 nil option 会在触库前返回带位置索引的错误；`ReconcileSchedules` 拒绝重复的 schedule name，不会让同一批声明静默 last-wins。
 - job kind、schedule 的 name/kind 和 worker ID 会去除首尾空白后再注册、查询、入队或持久化；`" task "` 与 `"task"` 始终是同一个标识符。标识符必须是合法 UTF-8、只含可打印字符且不超过 255 字节，纯空白、控制字符、换行和超长值都会在触库前报错。
-- `Store.Get` 和终态租约只接受合法 UUID，job/worker 标识会先规范化再触库；`DisableSchedulesExcept` 同样会 trim、拒绝空名称和重复名称。`max_attempts` 必须落在 Postgres `integer` 范围内。
+- `Store.Get` 和终态租约只接受合法 UUID，job/worker 标识会先规范化再触库；`DisableSchedulesExcept` 同样会 trim、拒绝空名称和重复名称。`max_attempts` 必须落在内核规定的 portable int32 范围内，PostgreSQL 适配器直接复用该约束。
 - worker/scheduler 的常驻循环 panic 会通过 `runtime.FailureReporter` 上报并让组件变为未就绪；普通存储错误、handler 失败和 `ErrLeaseLost` 不会被误判为组件崩溃。任务投递语义是 at-least-once，业务 handler 必须可重复执行。
 - 终态 ack 带租约围栏，可安全小范围重试：临时数据库错误最多重试 3 次；`ErrLeaseLost` 立即停止，不与其他 worker 竞争已回收的任务。
 - worker 与 scheduler 日志固定携带 `component=worker` / `component=scheduler`。每个 Worker 实例还会生成独立身份，并发 worker ID 形如 `jobs-worker-<instance-uuid>-1`，多进程日志不再混淆。终态 ack 的租约丢失、重试耗尽和最终失败都带 `job_id`、`kind`、`worker`、`attempt`、`max_attempts`；ack 重试耗尽不会把组件误判为崩溃，任务会在 stale recovery 后重新领取。
 - 终态 ack 重试耗尽不会卡住 worker loop，也不会翻转 readiness；它以带完整上下文的 ERROR 日志暴露，随后由 stale recovery 重新领取。v1 不内置 Prometheus/metrics，生产告警应采集这类日志、running 任务年龄和 scheduler 延迟；metrics/OpenTelemetry 作为边缘组件接入。
 - 终态确认对提交歧义是幂等的：数据库已经写成 `succeeded`、`pending` 或 `failed`，但客户端没收到响应而重试时，同一 job、attempt、lease token 和错误原因的第二次确认返回成功；不同 token、不同 attempt 或其他状态仍返回 `ErrLeaseLost`。
 - `last_error` 与失败日志使用同一个 4096 字节上限；非法 UTF-8 会先替换为 `U+FFFD`，超长错误再按 UTF-8 边界截断并追加 `[truncated]`。handler 返回坏字节、超大错误或 panic stack 都不会无上限写入数据库和日志；截断是确定性的，因此同一失败的提交歧义重放仍可识别。
-- scheduler 启动通过单个事务 reconcile 声明：先预检全部 payload，再一次性 upsert 并禁用旧声明；不会出现部分 schedule 已更新的中间状态。
-- 到期 schedule 的分发在同一事务内完成行锁、job insert 和 `next_run_at` 推进；并发 dispatcher 对同一个 tick 只会产生一个 job。进程停机期间错过的多个 interval 不会补跑，恢复后从当前时间重新计时。
-- 如果 `Commit` 的响应在网络故障中丢失，调用方无法仅凭错误判断事务是否已提交；该操作仍可安全重试：已提交的 tick 已推进 `next_run_at`，重试不会再插入 job；未提交的 tick 保持到期，下一次扫描会重试。scheduler 把该错误记录为 `dispatch schedules` 并继续运行，不会为不确定结果做第二次 insert。
+- scheduler 启动只调用 `ReconcileSchedules`；内置 PostgreSQL 适配器用单个事务先预检全部 payload，再一次性 upsert 并禁用旧声明，不会出现部分 schedule 已更新的中间状态。自定义适配器也必须保证整批 reconcile 的原子性。
+- 内置 PostgreSQL 适配器在分发到期 schedule 的同一事务内完成行锁、job insert 和 `next_run_at` 推进；并发 dispatcher 对同一个 tick 只会产生一个 job。自定义适配器必须提供等价的单 tick 原子领取。进程停机期间错过的多个 interval 不会补跑，恢复后从当前时间重新计时。
+- PostgreSQL 适配器的 `Commit` 响应如果在网络故障中丢失，调用方无法仅凭错误判断事务是否已提交；该操作仍可安全重试：已提交的 tick 已推进 `next_run_at`，重试不会再插入 job；未提交的 tick 保持到期，下一次扫描会重试。scheduler 把该错误记录为 `dispatch schedules` 并继续运行，不会为不确定结果做第二次 insert。
 - 同一进程同时运行 worker 时，用 `jobs.WithRegistry(registry)` 构造 scheduler。启动会在触库前确认每个声明的 kind 已注册，并用 handler 的精确 payload 类型执行同一套严格解码；未注册 kind 或类型不匹配会直接启动失败。只生产 schedule、不承载 handler 的进程可以省略该选项。
 - HTTP 入队先调用 `jobs.Registry.ValidatePayload`，使用目标 handler 的类型和同一严格 decoder 预检 payload；结构错误立即返回 422，不会留下必然失败的 durable job。
 - scheduler 只把到期 declaration 转成 job，不在进程内保存业务定时器。
@@ -779,8 +793,30 @@ job, err := store.Enqueue(ctx, "report.generate", ReportPayload{AccountID: "a_12
 
 `jobs.Registry` 的零值可直接使用：第一次注册会初始化内部索引。nil registry 的
 `Register` / `ValidatePayload` 返回错误，`Handler` / `Kinds` 返回空结果，不会 panic。
-`jobs.NewStore(nil)` 可用于只构建路由/文档的 `check` 路径；任何数据库方法在触库前
-返回 `jobs.ErrStoreUnavailable`，不会产生 nil pool panic。
+内置的 `jobspostgres.NewStore(nil)` 可用于只构建路由/文档的 `check` 路径；任何数据库
+方法在触库前返回 `jobs.ErrStoreUnavailable`，不会产生 nil pool panic。自定义适配器也
+应提供“无连接即可构造、触库前报错”的路径，方便 `check`/OpenAPI 预检。
+
+自定义 Store 只实现接口并复用 `platform/jobs/jobutil`，不要复制一套宽松 JSON 规则：
+
+```go
+type jobStore struct{ db *sql.DB }
+
+var _ jobs.Store = (*jobStore)(nil)
+
+store := &jobStore{db: db}
+worker := jobs.NewWorker(store, registry, logger, cfg.Worker)
+scheduler := jobs.NewScheduler(store, logger, cfg.Scheduler, jobs.WithRegistry(registry))
+```
+
+适配器在持久化前调用 `jobutil.MarshalPayload`，在 claim 后把规范化后的 lease token 写入
+`jobs.Job.LeaseToken`；终态写入使用 `jobs.Job.Lease(workerID)` 生成的租约。错误、标识符
+和 schedule 的规范化也由 `jobutil` 统一提供。
+
+自定义适配器至少要保证：`Claim` 原子领取并生成新 token，终态写入按 lease fencing，
+stale recovery 不会让已耗尽 attempt 的任务再执行一次，schedule reconcile 与单 tick
+dispatch 具备原子性，并且在触库前完成同样的 payload/标识符预检。其他数据库可以使用
+自己的行锁、条件更新或事务机制，不需要模拟 PostgreSQL SQL。
 
 typed job payload 与 HTTP body 使用同一套严格 JSON 规则：重复 object key、未知字段、
 尾随 JSON 值和任意层级的 `null` 都会被拒绝；`time.Duration` 等值语义仍保持
@@ -1014,7 +1050,7 @@ worker 每次 run 都捕获自己的完成 channel；即使一次 `Stop` 因超�
 `runtime.HTTP` 会在非正常 `Serve` 退出时关闭 `Failed()`；`Runtime` 随即按逆序停止所有组件，
 并把该故障与停机错误一起返回给 `app.Main`，不会留下“监听已经死亡但进程继续挂起”的假活状态。
 
-`postgres.Postgres` 和 `redis.Redis` 同样是一次性生命周期组件：构造期 trim 并拒绝空的 `DATABASE_URL` / `REDIS_URL`，启动、停止和 Ping 串行化，重复启动失败，重复停止幂等，停止后拒绝启动和 Ping。nil receiver 有确定行为：`Start`/`Ping` 返回错误，`Stop` 幂等成功，`Pool`/`Client` 返回 nil。`migrate.Migrator` 也采用单次生命周期，URL 会在构造期 trim；启用迁移但 URL 为空时会在打开数据库前失败。它还会在应用任何 source 之前校验所有 source 的名称、文件系统（包括 typed-nil `fs.FS`）、非冲突版本表和 goose provider；source 名称必须是合法 UTF-8、只含可打印字符且不超过 128 字节，版本表名还必须落在 PostgreSQL 63 字节标识符上限内，避免数据库截断后让两个 source 静默共用一张表。后续 source 的配置错误不会导致前面的 source 已经落库。`Migrator` 零值可使用，未配置 logger 时回退到 `slog.Default()`。
+`postgres.Postgres` 和 `redis.Redis` 同样是一次性生命周期组件：构造期 trim 并拒绝空的 `DATABASE_URL` / `REDIS_URL`，启动、停止和 Ping 串行化，重复启动失败，重复停止幂等，停止后拒绝启动和 Ping。nil receiver 有确定行为：`Start`/`Ping` 返回错误，`Stop` 幂等成功，`Pool`/`Client` 返回 nil。`migrate.Migrator` 也采用单次生命周期，URL 会在构造期 trim；启用迁移但 URL 为空、driver/dialect 未配置时会在打开数据库前失败。它还会在应用任何 source 之前校验所有 source 的名称、文件系统（包括 typed-nil `fs.FS`）、非冲突版本表和 goose provider；source 名称必须是合法 UTF-8、只含可打印字符且不超过 128 字节，版本表名还必须落在 `IdentifierLimit` 内，避免数据库截断后让两个 source 静默共用一张表。`IdentifierLimit` 为 0 时关闭该长度检查，PostgreSQL 适配器会设为 63。后续 source 的配置错误不会导致前面的 source 已经落库。`Migrator` 零值可使用，未配置 logger 时回退到 `slog.Default()`。
 
 迁移执行遵守传入的 `context.Context`：取消发生在打开数据库前、source 之间或 goose 执行中时会停止后续工作并返回错误。Goose 默认把每个 SQL migration 放在独立事务中，因此失败版本本身通常回滚，但**已经完成的版本和更早的 source 不会回滚**；使用 `-- +goose NO TRANSACTION` 时，失败版本也可能只应用了一部分。框架不伪造跨 source 的全局事务，而是让迁移失败阻止 worker/HTTP 启动，并在错误中报告当前 source 已完成数量和此前已完成的 source。生产环境应由发布流水线保证 schema 变更可重入、可人工修复，并在启动前确认所需版本均已应用。
 
@@ -1029,10 +1065,24 @@ ALTER TABLE example DROP COLUMN note;
 ```
 
 ```go
-migrate.New(url, enabled, logger,
+migratepostgres.New(url, enabled, logger,
 	migrate.Migration{Name: "plinth", FS: plinthmigrations.FS()},
 	migrate.Migration{Name: "app", FS: appmigrations.FS()},
 )
+```
+
+其他数据库通过 `migrate.NewWithConfig` 选择 `database/sql` driver 与 Goose dialect；应用
+需要匿名 import 对应的 driver。`IdentifierLimit` 按目标数据库设置，0 表示不做长度预检：
+
+```go
+migrator := migrate.NewWithConfig(migrate.Config{
+	URL:             url,
+	Enabled:         enabled,
+	Logger:          logger,
+	Driver:          "mysql",
+	Dialect:         goose.DialectMySQL,
+	IdentifierLimit: 64,
+}, sources...)
 ```
 
 每个 source 使用独立的 `goose_version_<name>` 表，应用 migration 版本不会和框架 migration 冲突。`AUTO_MIGRATE=true` 时在 worker 启动前执行所有 source 的 `Up`。生产环境如果由独立发布流水线管理 schema，可设置为 `false`，但必须保证 worker 启动前目标版本已应用。
@@ -1405,7 +1455,7 @@ backend-neutral 钩子，供应用把 worker attempt 和 scheduler scan 接到�
 
 ### 迁移与 dead-letter 运维
 
-`plinth-migrate` 可以脱离应用启动 migration，并接受多个独立 source：
+`plinth-migrate` 使用内置的 PostgreSQL 适配器，可以脱离应用启动 migration，并接受多个独立 source：
 
 ```sh
 plinth-migrate -database-url "$DATABASE_URL" \
