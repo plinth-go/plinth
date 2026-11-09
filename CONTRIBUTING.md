@@ -16,6 +16,15 @@ git commit -s
 Use your real name and a reachable email address in the sign-off. Do not add a
 separate copyright header unless a file already has one.
 
+CI verifies the sign-off rule on pull requests with `scripts/check-dco.sh`.
+Merge commits are skipped; bot commits must still include a sign-off. To run
+the same check locally before opening a PR:
+
+```sh
+git fetch origin main
+DCO_BASE=origin/main make dco-check
+```
+
 ## Toolchain
 
 Use the Go version declared in `go.mod`. Do not hardcode a local toolchain path.
