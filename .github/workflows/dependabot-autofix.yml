@@ -9,6 +9,7 @@ permissions:
   actions: write
   contents: write
   pull-requests: read
+  statuses: write
 
 concurrency:
   group: dependabot-autofix-${{ github.event.workflow_run.head_branch }}
@@ -22,7 +23,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       startsWith(github.event.workflow_run.head_branch, 'dependabot/')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 50
     steps:
       - name: Resolve Dependabot pull request
         id: pr
@@ -120,6 +121,7 @@ jobs:
           fi
 
       - name: Commit and push
+        id: commit
         if: steps.changes.outputs.changed == 'true'
         env:
           BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -130,20 +132,89 @@ jobs:
           git add THIRD_PARTY_NOTICES.md
           git commit -s -m 'chore(deps): refresh generated files'
           git push origin "HEAD:${BRANCH}"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Dispatch CI
+      - name: Validate bot commit and publish required statuses
         if: steps.changes.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ steps.commit.outputs.sha }}
         run: |
           set -euo pipefail
-          payload=$(jq -nc --arg ref "$BRANCH" '{ref:$ref}')
-          curl --fail-with-body -sS -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" \
-            -d "$payload"
-          echo "Dispatched CI for ${BRANCH}." >> "$GITHUB_STEP_SUMMARY"
+
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" \
+            -f ref="$BRANCH" >/dev/null
+
+          run_id=""
+          for _ in $(seq 1 24); do
+            run_id=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" \
+              -f head_sha="$SHA" \
+              -f event=workflow_dispatch \
+              -f per_page=100 \
+              --jq '[.workflow_runs[] | select(.name == "CI")][0].id // empty')
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 5
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::Could not locate the dispatched CI run for ${SHA}." >&2
+            exit 1
+          fi
+
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          status=""
+          conclusion=""
+          for _ in $(seq 1 240); do
+            run=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")
+            status=$(jq -r '.status' <<<"$run")
+            conclusion=$(jq -r '.conclusion // empty' <<<"$run")
+            if [ "$status" = "completed" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ "$status" != "completed" ]; then
+            echo "::error::CI run ${run_id} did not complete before the timeout." >&2
+            exit 1
+          fi
+
+          jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
+          failed=0
+          for context in 'Go 1.27.0 (minimum)' 'Release gate'; do
+            job=$(jq -c --arg name "$context" '[.jobs[] | select(.name == $name)][0] // {}' <<<"$jobs")
+            job_conclusion=$(jq -r '.conclusion // empty' <<<"$job")
+            target_url=$(jq -r '.html_url // empty' <<<"$job")
+            case "$job_conclusion" in
+              success)
+                state=success
+                ;;
+              failure|cancelled|timed_out|action_required|startup_failure)
+                state=failure
+                failed=1
+                ;;
+              *)
+                state=error
+                failed=1
+                ;;
+            esac
+            args=(--method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}"
+              -f state="$state"
+              -f context="$context"
+              -f description="CI ${job_conclusion:-missing} for bot commit")
+            if [ -n "$target_url" ]; then
+              args+=(-f target_url="$target_url")
+            else
+              args+=(-f target_url="$run_url")
+            fi
+            gh api "${args[@]}" >/dev/null
+            echo "${context}: ${state} (${job_conclusion:-missing})" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ "$conclusion" != "success" ] || [ "$failed" -ne 0 ]; then
+            echo "::error::CI failed for bot commit ${SHA}; see ${run_url}." >&2
+            exit 1
+          fi
+          echo "CI passed for ${SHA}; published required statuses." >> "$GITHUB_STEP_SUMMARY"

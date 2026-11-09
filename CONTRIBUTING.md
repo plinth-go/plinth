@@ -73,9 +73,12 @@ Do not edit `THIRD_PARTY_NOTICES.md` by hand.
 
 For Dependabot pull requests, the `Dependabot autofix` workflow handles this
 automatically. When the `Release gate` fails, it runs `make license-update` on
-the PR branch, commits as `github-actions[bot]`, and re-dispatches CI. The
-workflow is limited to branches owned by `dependabot[bot]` in this repository.
-If it cannot push, run the commands manually on the PR branch before merging.
+the PR branch, commits as `github-actions[bot]`, and dispatches CI for the new
+commit. Pushes made with `GITHUB_TOKEN` do not emit a new `pull_request` event,
+so the workflow copies the real CI job results back to the PR commit as the
+required `Go 1.27.0 (minimum)` and `Release gate` commit statuses. The workflow
+is limited to branches owned by `dependabot[bot]` in this repository. If it
+cannot push, run the commands manually on the PR branch before merging.
 
 ## Design constraints
 
