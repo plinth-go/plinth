@@ -1,0 +1,67 @@
+name: Feature request
+description: Propose a compatible improvement or new capability.
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Plinth is deliberately a small application kernel. Proposals are strongest when they identify a concrete integration problem and preserve the thin-core, explicit-dependency design.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Core routing or request binding
+        - Runtime, app shell, configuration, or logging
+        - Optional platform package
+        - OpenAPI, docs, examples, or testing
+        - Release, CI, or maintainer tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you unable to do today, and what makes the current workaround insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest API, package, or documentation change that solves the problem.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing options, stdlib approaches, external libraries, or narrower changes.
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibility and dependency impact
+      description: Note any public API, behavior-contract, security, deployment, or dependency changes.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues, pull requests, and the roadmap for a similar request.
+          required: true
+        - label: The proposal does not require an automatic second router, DI container, ORM, or implicit optional dependency in the core packages.
+          required: true
