@@ -13,7 +13,7 @@ generate:
 	$(GO) generate ./...
 
 fmt:
-	$(GOFMT) -w app cmd internal kernel platform runtime utils webui
+	$(GOFMT) -w app cmd examples internal kernel platform runtime utils webui
 
 docscheck:
 	cd internal/api && $(GO) run ../../cmd/plinth-docgen -root ../.. -check -out ../generated/docs_gen.go

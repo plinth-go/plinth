@@ -15,7 +15,8 @@
 
 | 想做什么 | 先看 |
 |---|---|
-| 5 分钟写一个 typed endpoint | [`examples/minimal-http.md`](examples/minimal-http.md) |
+| 5 分钟运行一个 typed endpoint | [`examples/hello`](examples/hello) |
+| typed binding、参数和 OpenAPI 细节 | [`examples/minimal-http.md`](examples/minimal-http.md) |
 | 配置、日志、`app.Main`、自定义子命令 | [`examples/app-shell.md`](examples/app-shell.md) |
 | JWT 认证 + 数据库权限 + 接口鉴权 | [`examples/jwt-postgres-authz.md`](examples/jwt-postgres-authz.md) |
 | 只用声明式权限 tag | [`examples/authz.md`](examples/authz.md) |
@@ -28,8 +29,9 @@
 | 选择 Postgres/Redis/jobs/对象存储 | [`examples/optional-platform.md`](examples/optional-platform.md) |
 | 让 AI/代码代理快速定位资料 | [`llms.txt`](llms.txt) |
 
-`examples/` 是**文档型示例**，允许伪代码，不是可运行工程，也不包含业务模型。它们跟随框架
-API 同版本演进；可运行的真实业务应用不放进框架模块，避免示例变成另一套需要维护的产品。
+`examples/` 多数文件是**文档型示例**，允许伪代码，也不包含业务模型；`examples/hello/` 是
+唯一可运行的 quickstart，不依赖 Postgres/Redis，并由 `go test ./...` 覆盖。真实业务应用
+不放进框架模块，避免示例变成另一套需要维护的产品。
 除非专门演示错误处理，示例默认返回的 error 为 nil，并用 `_` 接收。
 
 ## 已实现
@@ -65,12 +67,10 @@ API 同版本演进；可运行的真实业务应用不放进框架模块，避�
 
 ## 在另一个模块中使用
 
-把本仓库保留为独立模块，在业务项目中直接 import：
+在业务模块中安装已经发布的版本，然后直接 import：
 
-```go
-require github.com/plinth-go/plinth v1.0.0
-
-replace github.com/plinth-go/plinth => ../plinth
+```sh
+go get github.com/plinth-go/plinth@v1.0.0
 ```
 
 ```go
@@ -152,7 +152,7 @@ import (
 ## 版本与发布
 
 对外版本使用 Semantic Versioning 的 Go module tag；开发记录里的 `vNNN` 等编号只是内部
-迭代号，不是 release version。首个稳定发布目标是 **`v1.0.0`**，公开 API 和兼容性规则见
+迭代号，不是 release version。当前稳定版本是 **`v1.0.0`**，公开 API 和兼容性规则见
 [`RELEASING.md`](RELEASING.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 发布候选的标准验证入口是：

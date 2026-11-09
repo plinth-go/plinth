@@ -3,8 +3,8 @@
 Plinth 使用 Semantic Versioning 发布 Go module。开发记录里的 `v177`、`v181`
 等编号只是内部迭代号，不是 module version，也不进入 tag。
 
-首个稳定发布目标是 **`v1.0.0`**。功能面、公开 API 基线、安全边界和测试边界已经
-冻结；在 tag 创建前，当前仓库状态应视为 release candidate。
+当前稳定版本是 **`v1.0.0`**。v1 内保持公开 API、行为契约和安全边界兼容；未发布变更先
+记录在 `CHANGELOG.md` 的 `[Unreleased]` 下，发布时再冻结版本号和日期并创建 tag。
 
 ## 版本语义
 
