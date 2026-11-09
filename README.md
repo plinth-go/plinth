@@ -153,7 +153,8 @@ import (
 
 对外版本使用 Semantic Versioning 的 Go module tag；开发记录里的 `vNNN` 等编号只是内部
 迭代号，不是 release version。当前稳定版本是 **`v1.0.0`**，公开 API 和兼容性规则见
-[`RELEASING.md`](RELEASING.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+[`RELEASING.md`](RELEASING.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)，后续方向见
+[`ROADMAP.md`](ROADMAP.md)。
 
 发布候选的标准验证入口是：
 
@@ -1523,8 +1524,8 @@ migration CLI 和 dead-letter 运维 API 都以独立子包或独立命令提供
 
 ## 参与贡献
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全漏洞请按 [SECURITY.md](SECURITY.md)
-私密报告。
+参见 [CONTRIBUTING.md](CONTRIBUTING.md) 与 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+安全漏洞请按 [SECURITY.md](SECURITY.md) 私密报告，不要提交公开 issue。
 
 ## 许可证
 

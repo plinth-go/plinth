@@ -1,0 +1,93 @@
+name: Bug report
+description: Report a reproducible defect in Plinth.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove credentials, private hostnames, and customer data before submitting. Security vulnerabilities must use the private reporting link on the issue chooser.
+
+  - type: input
+    id: plinth_version
+    attributes:
+      label: Plinth version
+      description: The module version or commit where the problem occurs.
+      placeholder: v1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: go version go1.27.0 linux/amd64
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Core routing or request binding
+        - Runtime, app shell, configuration, or logging
+        - Optional platform package
+        - OpenAPI, docs, or examples
+        - Release, CI, or dependency tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and why it is wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest code, commands, or configuration that reproduces the problem.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the full error, status code, response, or panic when available.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Related dependencies, deployment environment, or workarounds tried.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and pull requests for the same problem.
+          required: true
+        - label: This report does not contain a security vulnerability.
+          required: true

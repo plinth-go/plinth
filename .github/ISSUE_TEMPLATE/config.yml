@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/plinth-go/plinth/security/policy
+    about: Report vulnerabilities privately. Do not open a public issue for an unfixed security problem.
+  - name: Runnable quickstart
+    url: https://github.com/plinth-go/plinth/tree/main/examples/hello
+    about: Follow the dependency-free first-run example before opening a usage question.
