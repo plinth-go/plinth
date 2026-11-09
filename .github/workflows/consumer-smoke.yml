@@ -1,0 +1,111 @@
+name: Consumer smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/consumer-smoke.yml
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consumer-smoke
+  cancel-in-progress: false
+
+jobs:
+  latest-release:
+    name: Latest release consumer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up minimum Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.0"
+          cache: false
+
+      - name: Build and run an external consumer
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          module_dir="$RUNNER_TEMP/plinth-consumer-smoke"
+          mkdir -p "$module_dir"
+          cd "$module_dir"
+          go mod init example.com/plinth-consumer-smoke
+          go get github.com/plinth-go/plinth@latest
+
+          cat > main.go <<'GO'
+          package main
+
+          import (
+          	"context"
+          	"errors"
+          	"log/slog"
+          	"net/http"
+          	"os"
+          	"time"
+
+          	"github.com/plinth-go/plinth/kernel"
+          )
+
+          type helloInput struct {
+          	kernel.Meta `route:"GET /hello/{name}"`
+
+          	Name string `path:"name" validate:"required,min=1,max=40"`
+          }
+
+          type helloOutput struct {
+          	Message string `json:"message"`
+          }
+
+          func hello(_ context.Context, in helloInput) (helloOutput, error) {
+          	return helloOutput{Message: "hello, " + in.Name}, nil
+          }
+
+          func main() {
+          	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+          	router := kernel.NewRouter(logger, "Plinth consumer smoke", "dev")
+          	router.Handle(hello)
+
+          	addr := os.Getenv("ADDR")
+          	if addr == "" {
+          		addr = "127.0.0.1:8080"
+          	}
+          	server := &http.Server{
+          		Addr:              addr,
+          		Handler:           router,
+          		ReadHeaderTimeout: 5 * time.Second,
+          	}
+          	logger.Info("listening", "addr", addr)
+          	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+          		logger.Error("serve failed", "error", err)
+          		os.Exit(1)
+          	}
+          }
+          GO
+
+          go mod tidy
+          resolved=$(go list -m -f '{{.Version}}' github.com/plinth-go/plinth)
+          printf 'Resolved published module: %s\n' "$resolved" >> "$GITHUB_STEP_SUMMARY"
+
+          go build -trimpath -o consumer-smoke .
+          ADDR=127.0.0.1:18080 ./consumer-smoke >server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for _ in $(seq 1 60); do
+            if body=$(curl -fsS http://127.0.0.1:18080/hello/Ada 2>/dev/null); then
+              test "$body" = '{"message":"hello, Ada"}'
+              printf 'Response: %s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 0.25
+          done
+
+          cat server.log >&2
+          exit 1

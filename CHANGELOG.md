@@ -9,6 +9,8 @@ numbers, not module versions.
 ### Added
 
 - A runnable `examples/hello` quickstart with a real-server HTTP test.
+- A scheduled external-consumer smoke workflow that builds and runs the latest
+  published module from a clean temporary module.
 - `actionlint` and `govulncheck` in the required release gate, plus CodeQL
   default setup for Go and GitHub Actions.
 - CI, Go Reference, license, and latest-release badges in the README.

@@ -81,6 +81,15 @@ required `Go 1.27.0 (minimum)` and `Release gate` commit statuses. The workflow
 is limited to branches owned by `dependabot[bot]` in this repository. If it
 cannot push, run the commands manually on the PR branch before merging.
 
+## Published-module smoke
+
+The `Consumer smoke` workflow runs weekly and can also be dispatched manually.
+It creates a clean temporary module, resolves `github.com/plinth-go/plinth@latest`,
+builds a minimal application, and sends a real HTTP request to it. This catches
+tag, module-path, and proxy regressions that source-tree tests cannot detect.
+It tests the latest published release rather than a pull request, so it is not
+part of the required PR checks.
+
 ## Design constraints
 
 - Plinth is an application kernel, not a complete web framework.
