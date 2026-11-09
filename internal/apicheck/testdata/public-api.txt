@@ -1,0 +1,1033 @@
+package github.com/plinth-go/plinth/app
+func EnvTemplate(config any, options ...EnvOption) ([]byte, error)
+func LoadEnv(ctx context.Context, config any, options ...EnvOption) error
+func Main(application Application)
+func Run(ctx context.Context, application Application, args []string) error
+func RunIO(ctx context.Context, application Application, args []string, stdout, stderr io.Writer) error
+func WithEnvPrefix(prefix string) EnvOption
+type Application struct {
+	Name   string
+	Config any
+
+	EnvPrefix   string
+	BuildRoutes func() *kernel.Router
+	Serve       func(context.Context) error
+
+	Commands []*Command
+
+	CheckWiring func(*kernel.Router) error
+}
+type Command = cli.Command
+type EnvOption func(*envOptions)
+type Flag = cli.Flag
+
+package github.com/plinth-go/plinth/kernel
+func (a Attachment) Respond(w http.ResponseWriter, _ *http.Request) error
+func (c CSV) Respond(w http.ResponseWriter, _ *http.Request) error
+func (e *HTTPError) Error() string
+func (e *HTTPError) Unwrap() error
+func (e *ValidationError) Error() string
+func (g *Group) Group(prefix string, mw ...Middleware) *Group
+func (g *Group) Handle[In, Out any](h Handler[In, Out], opts ...Option)
+func (g *Group) Prefix() string
+func (g *Group) Raw(method, pattern string, h http.Handler, opts ...Option)
+func (g *Group) RegisterOps(cfg OpsConfig)
+func (g *Group) Tag(tags ...string) *Group
+func (g *Group) Use(mw ...Middleware)
+func (h Headers) ResponseHeaders() http.Header
+func (k ContextKey[T]) Get(ctx context.Context) (T, bool)
+func (k ContextKey[T]) Name() string
+func (k ContextKey[T]) With(ctx context.Context, value T) context.Context
+func (r *Router) Group(prefix string, mw ...Middleware) *Group
+func (r *Router) Handle[In, Out any](h Handler[In, Out], opts ...Option)
+func (r *Router) OpenAPIHandler() http.HandlerFunc
+func (r *Router) OpenAPIJSON() []byte
+func (r *Router) Raw(method, pattern string, h http.Handler, opts ...Option)
+func (r *Router) RegisterOps(cfg OpsConfig)
+func (r *Router) RegisterValidation(tag string, fn validator.Func) (err error)
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request)
+func (r *Router) SetDocs(docs DocSet)
+func (r *Router) Use(mw ...Middleware)
+func (r *Router) Validate() error
+func (r *StreamRegistry) Add(closeFn func()) (remove func(), ok bool)
+func (r *StreamRegistry) CloseStreams()
+func (r *StreamRegistry) Closed() bool
+func (r *StreamRegistry) ServeSSE(w http.ResponseWriter, req *http.Request, fn func(context.Context, *SSE) error) error
+func (s *SSE) Comment(text string) error
+func (s *SSE) Event(name string, value any) error
+func (s OpsSettings) Apply(cfg OpsConfig) OpsConfig
+func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler
+func BadRequest(detail string) error
+func BodyLimit(maxBytes int64) func(http.Handler) http.Handler
+func Conflict(detail string) error
+func Copy(w http.ResponseWriter, filename, contentType string, src io.Reader) error
+func DefaultOpsSettings() OpsSettings
+func Description(s string) Option
+func Forbidden(detail string) error
+func Hidden() Option
+func Internal(err error) error
+func Livez(w http.ResponseWriter, _ *http.Request)
+func NewContextKey[T any](name string) ContextKey[T]
+func NewRouter(logger *slog.Logger, title, version string) *Router
+func NewStreamRegistry(loggers ...*slog.Logger) *StreamRegistry
+func NotFound(detail string) error
+func OperationFromContext(ctx context.Context) (OperationMeta, bool)
+func OperationID(s string) Option
+func Produces(contentTypes ...string) Option
+func Readyz(cfg ReadyConfig) http.HandlerFunc
+func Recover(logger *slog.Logger) func(http.Handler) http.Handler
+func RequestID() func(http.Handler) http.Handler
+func RequestIDFromContext(ctx context.Context) string
+func RequirePermissions(permissions ...string) Option
+func SetHeaders(w http.ResponseWriter, headers http.Header) error
+func Status(code int) Option
+func Summary(s string) Option
+func Tags(tags ...string) Option
+func TooLarge(detail string) error
+func TooManyRequests(detail string) error
+func Unprocessable(detail string) error
+func UnsupportedMediaType(detail string) error
+func WriteAttachment(w http.ResponseWriter, filename, contentType string, write func(io.Writer) error) error
+func WriteCSV(w http.ResponseWriter, filename string, header []string, rows func(yield func([]string) error) error) error
+func WriteCSVTo(dst io.Writer, header []string, rows func(yield func([]string) error) error) error
+func WriteFile(w http.ResponseWriter, r *http.Request, path, downloadName string) error
+func WriteJSON(w http.ResponseWriter, status int, value any) error
+func WriteProblem(w http.ResponseWriter, r *http.Request, err error, logf func(string, ...any))
+type Attachment struct {
+	Filename    string
+	ContentType string
+	Write       func(io.Writer) error
+}
+type BodyMeta struct {
+	Required bool
+	Schema   map[string]any
+}
+type CSV struct {
+	Meta     `produces:"text/csv"`
+	Filename string
+	Header   []string
+	Rows     func(yield func([]string) error) error
+}
+type ContextKey[T any] struct {
+	name string
+	id   *contextKeyID
+}
+type ContextValidator interface {
+	Validate(context.Context) error
+}
+type DocSet struct {
+	Operations map[string]OperationDoc
+	Fields     map[string]string
+}
+type FieldError struct {
+	Location string `json:"location,omitempty"`
+	Field    string `json:"field,omitempty"`
+	Message  string `json:"message"`
+}
+type Group struct {
+	router     *Router
+	parent     *Group
+	prefix     string
+	middleware []Middleware
+	tags       []string
+	frozen     bool
+}
+type HTTPError struct {
+	Status int
+	Title  string
+	Detail string
+	Err    error
+}
+type Handler[In, Out any] func(context.Context, In) (Out, error)
+type Headerer interface {
+	ResponseHeaders() http.Header
+}
+type Headers http.Header
+type Meta struct{}
+type Middleware func(http.Handler) http.Handler
+type OperationDoc struct {
+	Summary     string
+	Description string
+}
+type OperationMeta struct {
+	Method              string
+	Path                string
+	OperationID         string
+	Summary             string
+	Description         string
+	Tags                []string
+	RequiredPermissions []string
+	Status              int
+	NoContent           bool
+	Hidden              bool
+	Produces            []string
+	Params              []ParamMeta
+	Body                *BodyMeta
+	ResponseSchema      map[string]any
+	raw                 bool
+	responder           bool
+	inputType           reflect.Type
+	defaults            []defaultCheck
+}
+type OpsConfig struct {
+	LivePath    string
+	ReadyPath   string
+	OpenAPIPath string
+	DocsPath    string
+
+	DisableLive    bool
+	DisableReady   bool
+	DisableOpenAPI bool
+
+	Checks  []ReadyCheck
+	Timeout time.Duration
+	Logger  *slog.Logger
+
+	Live    http.HandlerFunc
+	Ready   http.HandlerFunc
+	OpenAPI http.HandlerFunc
+	Docs    http.Handler
+}
+type OpsSettings struct {
+	LivenessEnabled bool `env:"LIVENESS_ENABLED,default=true" envdoc:"Register the liveness endpoint."`
+
+	LivenessPath string `env:"LIVENESS_PATH,default=/livez" envdoc:"Liveness endpoint path." validate:"startswith=/"`
+
+	ReadinessEnabled bool `env:"READINESS_ENABLED,default=true" envdoc:"Register the readiness endpoint."`
+
+	ReadinessPath string `env:"READINESS_PATH,default=/readyz" envdoc:"Readiness endpoint path." validate:"startswith=/"`
+
+	OpenAPIEnabled bool `env:"OPENAPI_ENABLED,default=true" envdoc:"Register the OpenAPI document and Swagger UI."`
+
+	OpenAPIPath string `env:"OPENAPI_PATH,default=/openapi.json" envdoc:"OpenAPI document path." validate:"startswith=/"`
+
+	DocsPath string `env:"DOCS_PATH,default=/docs/" envdoc:"Swagger UI path; a trailing slash is added when omitted." validate:"startswith=/"`
+}
+type Option func(*OperationMeta)
+type ParamMeta struct {
+	Name        string
+	In          string
+	Required    bool
+	Description string
+	Schema      map[string]any
+}
+type PlainValidator interface {
+	Validate() error
+}
+type Problem struct {
+	Type     string       `json:"type,omitempty"`
+	Title    string       `json:"title"`
+	Status   int          `json:"status"`
+	Detail   string       `json:"detail,omitempty"`
+	Instance string       `json:"instance,omitempty"`
+	Errors   []FieldError `json:"errors,omitempty"`
+}
+type ReadyCheck struct {
+	Name  string
+	Check func(context.Context) error
+}
+type ReadyConfig struct {
+	Checks  []ReadyCheck
+	Timeout time.Duration
+	Logger  *slog.Logger
+}
+type Responder interface {
+	Respond(http.ResponseWriter, *http.Request) error
+}
+type Router struct {
+	mux             *http.ServeMux
+	logger          *slog.Logger
+	title           string
+	version         string
+	validate        *validator.Validate
+	validationTags  map[string]bool
+	middleware      []Middleware
+	ops             []OperationMeta
+	docs            DocSet
+	frozen          bool
+	opsMu           sync.Mutex
+	opsRevision     uint64
+	openapiJSON     []byte
+	openapiRevision uint64
+}
+type SSE struct {
+	w          http.ResponseWriter
+	controller *http.ResponseController
+}
+type StreamRegistry struct {
+	mu      sync.Mutex
+	next    uint64
+	closed  bool
+	closers map[uint64]func()
+	logger  *slog.Logger
+}
+type ValidationError struct {
+	Errors []FieldError
+}
+var ErrStreamsClosed = errors.New("kernel: stream registry is closed")
+
+package github.com/plinth-go/plinth/kernel/auth
+func FromContext(ctx context.Context) (Principal, bool)
+func New(verifier Verifier, cfg Config, logger *slog.Logger) (func(http.Handler) http.Handler, error)
+func WithPrincipal(ctx context.Context, principal Principal) context.Context
+type Config struct {
+	Header   string
+	Realm    string
+	Optional bool
+}
+type Principal struct {
+	Subject   string
+	Issuer    string
+	Audience  []string
+	ExpiresAt time.Time
+	Claims    map[string]any
+}
+type Verifier interface {
+	Verify(context.Context, string) (Principal, error)
+}
+
+package github.com/plinth-go/plinth/kernel/authz
+func (f PermissionSourceFunc) Permissions(ctx context.Context) ([]string, error)
+func New(source PermissionSource, cfg Config) (func(http.Handler) http.Handler, error)
+type Config struct {
+	Logger *slog.Logger
+
+	DeniedDetail string
+}
+type PermissionSource interface {
+	Permissions(context.Context) ([]string, error)
+}
+type PermissionSourceFunc func(context.Context) ([]string, error)
+
+package github.com/plinth-go/plinth/kernel/cors
+func New(cfg Config) (func(http.Handler) http.Handler, error)
+type Config struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	ExposedHeaders   []string
+	AllowCredentials bool
+	MaxAge           time.Duration
+}
+
+package github.com/plinth-go/plinth/kernel/uploads
+func (f *File) Header() textproto.MIMEHeader
+func (f *File) Open() (*os.File, error)
+func (f *Form) Close() error
+func (f *Form) Value(name string) string
+func (p *Parser) Parse(r *http.Request) (*Form, error)
+func New(cfg Config) (*Parser, error)
+type Config struct {
+	MaxFiles            int
+	MaxFields           int
+	MaxFileBytes        int64
+	MaxTotalBytes       int64
+	MaxFieldBytes       int64
+	TempDir             string
+	AllowedContentTypes []string
+}
+type File struct {
+	Field       string
+	Filename    string
+	ContentType string
+	Size        int64
+	header      textproto.MIMEHeader
+	path        string
+}
+type Form struct {
+	Values map[string][]string
+	Files  []*File
+
+	dir    string
+	closed bool
+}
+type Parser struct {
+	cfg         Config
+	allowed     []mediaRange
+	contentType string
+}
+
+package github.com/plinth-go/plinth/kernel/websocket
+func (h *Hub) Serve(w http.ResponseWriter, req *http.Request, fn func(context.Context, *gorilla.Conn) error) (err error)
+func NewHub(streams *kernel.StreamRegistry, logger *slog.Logger) *Hub
+func NormalizeError(err error) error
+type Hub struct {
+	streams  *kernel.StreamRegistry
+	logger   *slog.Logger
+	upgrader gorilla.Upgrader
+}
+
+package github.com/plinth-go/plinth/logging
+const ConsoleNone
+const ConsoleStderr
+const ConsoleStdout Console = iota
+const FormatJSON = "json"
+const FormatText = "text"
+func (l *Logger) Close() error
+func (l *Logger) Err() error
+func (l *Logger) Slog() *slog.Logger
+func New(config Config) (*Logger, error)
+func ParseLevel(value string) (slog.Level, error)
+type Config struct {
+	Level     string
+	Format    string
+	Console   Console
+	File      string
+	Writers   []io.Writer
+	AddSource bool
+
+	ConfigureOptions func(*slog.HandlerOptions)
+
+	NewHandler func(io.Writer, *slog.HandlerOptions) slog.Handler
+}
+type Console int
+type Logger struct {
+	*slog.Logger
+	sink *sink
+}
+var ErrClosed = errors.New("logging output is closed")
+
+package github.com/plinth-go/plinth/platform/csrf
+func (s *MemoryStore) Delete(_ context.Context, id string) error
+func (s *MemoryStore) Exists(_ context.Context, id string) (bool, error)
+func (s *MemoryStore) Put(_ context.Context, id string, ttl time.Duration) error
+func New(cfg Config) (func(http.Handler) http.Handler, error)
+func NewMemoryStore() *MemoryStore
+func TokenFromContext(ctx context.Context) string
+type Config struct {
+	Store      Store
+	CookieName string
+	HeaderName string
+	Path       string
+	Domain     string
+	Secure     bool
+	HttpOnly   bool
+	SameSite   http.SameSite
+	TTL        time.Duration
+	Methods    []string
+	Logger     *slog.Logger
+
+	Token func(*http.Request) string
+}
+type MemoryStore struct {
+	mu         sync.Mutex
+	entries    map[string]time.Time
+	maxEntries int
+	puts       int
+	lastSweep  time.Time
+	now        func() time.Time
+}
+type Store interface {
+	Put(context.Context, string, time.Duration) error
+	Exists(context.Context, string) (bool, error)
+	Delete(context.Context, string) error
+}
+
+package github.com/plinth-go/plinth/platform/csrf/redis
+func (s *Store) Delete(ctx context.Context, id string) error
+func (s *Store) Exists(ctx context.Context, id string) (bool, error)
+func (s *Store) Put(ctx context.Context, id string, ttl time.Duration) error
+func NewStore(client goredis.UniversalClient, prefix string) (*Store, error)
+type Store struct {
+	client goredis.UniversalClient
+	prefix string
+}
+
+package github.com/plinth-go/plinth/platform/idempotency
+func (s *MemoryStore) Abort(_ context.Context, key, fingerprint string) error
+func (s *MemoryStore) Complete(_ context.Context, key string, completed Record, ttl time.Duration) error
+func (s *MemoryStore) Reserve(_ context.Context, key string, pending Record, ttl time.Duration) (Record, bool, error)
+func (s *RedisStore) Abort(ctx context.Context, key, fingerprint string) error
+func (s *RedisStore) Complete(ctx context.Context, key string, completed Record, ttl time.Duration) error
+func (s *RedisStore) Reserve(ctx context.Context, key string, pending Record, ttl time.Duration) (Record, bool, error)
+func Middleware(store Store, cfg Config, logger *slog.Logger) (func(http.Handler) http.Handler, error)
+func NewMemoryStore() *MemoryStore
+func NewRedisStore(client redis.UniversalClient, prefix string) (*RedisStore, error)
+type Config struct {
+	HeaderName       string
+	TTL              time.Duration
+	MaxRequestBytes  int64
+	MaxResponseBytes int64
+	Methods          []string
+	RequireKey       bool
+}
+type MemoryStore struct {
+	mu      sync.Mutex
+	records map[string]memoryRecord
+}
+type Record struct {
+	Fingerprint string      `json:"fingerprint"`
+	State       string      `json:"state"`
+	Status      int         `json:"status,omitempty"`
+	Header      http.Header `json:"header,omitempty"`
+	Body        []byte      `json:"body,omitempty"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+type RedisStore struct {
+	client redis.UniversalClient
+	prefix string
+}
+type Store interface {
+	Reserve(context.Context, string, Record, time.Duration) (Record, bool, error)
+	Complete(context.Context, string, Record, time.Duration) error
+	Abort(context.Context, string, string) error
+}
+var ErrReservationLost = errors.New("idempotency reservation was lost")
+
+package github.com/plinth-go/plinth/platform/jobs
+func (j Job) Lease(workerID string) Lease
+func (r *Registry) Handler(kind string) (Handler, bool)
+func (r *Registry) Kinds() []string
+func (r *Registry) ValidatePayload(kind string, payload json.RawMessage) error
+func (s *Scheduler) Declare(schedule Schedule) error
+func (s *Scheduler) Failed() <-chan struct{}
+func (s *Scheduler) Failure() error
+func (s *Scheduler) Name() string
+func (s *Scheduler) Ready() bool
+func (s *Scheduler) Start(ctx context.Context) error
+func (s *Scheduler) Stop(ctx context.Context) error
+func (s *Store) Claim(ctx context.Context, workerID string) (*Job, error)
+func (s *Store) DeleteFailed(ctx context.Context, id string) error
+func (s *Store) DisableSchedulesExcept(ctx context.Context, names []string) error
+func (s *Store) DispatchDueSchedules(ctx context.Context, limit int) (int, error)
+func (s *Store) Enqueue(ctx context.Context, kind string, payload any, opts ...EnqueueOption) (Job, error)
+func (s *Store) Get(ctx context.Context, id string) (Job, error)
+func (s *Store) ListFailed(ctx context.Context, limit, offset int) ([]Job, error)
+func (s *Store) MarkFailed(ctx context.Context, lease Lease, cause error, retryAt time.Time) error
+func (s *Store) MarkInterrupted(ctx context.Context, lease Lease, cause error) error
+func (s *Store) MarkSucceeded(ctx context.Context, lease Lease) error
+func (s *Store) Ping(ctx context.Context) error
+func (s *Store) ReconcileSchedules(ctx context.Context, schedules []Schedule) error
+func (s *Store) RecoverStale(ctx context.Context, staleAfter time.Duration) error
+func (s *Store) RetryFailed(ctx context.Context, id string) (Job, error)
+func (s *Store) UpsertSchedule(ctx context.Context, schedule Schedule) error
+func (w *Worker) Failed() <-chan struct{}
+func (w *Worker) Failure() error
+func (w *Worker) InFlight() int64
+func (w *Worker) Name() string
+func (w *Worker) Ready() bool
+func (w *Worker) Start(ctx context.Context) error
+func (w *Worker) Stop(ctx context.Context) error
+func DefaultSchedulerConfig() SchedulerConfig
+func DefaultWorkerConfig() WorkerConfig
+func MustRegister[T any](r *Registry, kind string, fn func(context.Context, T) error)
+func NewRegistry() *Registry
+func NewScheduler(store *Store, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler
+func NewStore(pool *pgxpool.Pool) *Store
+func NewWorker(store *Store, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker
+func Register[T any](r *Registry, kind string, fn func(context.Context, T) error) error
+func WithDelay(delay time.Duration) EnqueueOption
+func WithMaxAttempts(n int) EnqueueOption
+func WithRegistry(registry *Registry) SchedulerOption
+func WithRunAt(t time.Time) EnqueueOption
+func WithSchedulerObserver(observer Observer) SchedulerOption
+func WithWorkerObserver(observer Observer) WorkerOption
+type EnqueueOption func(*enqueueOptions)
+type Handler func(context.Context, json.RawMessage) error
+type Job struct {
+	ID string `json:"id"`
+
+	Kind string `json:"kind"`
+
+	Payload json.RawMessage `json:"payload"`
+
+	Status string `json:"status"`
+
+	RunAt time.Time `json:"run_at"`
+
+	Attempts int `json:"attempts"`
+
+	MaxAttempts int `json:"max_attempts"`
+
+	LastError *string `json:"last_error,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+
+	UpdatedAt time.Time `json:"updated_at"`
+
+	leaseToken string
+}
+type Lease struct {
+	JobID    string
+	WorkerID string
+	Attempt  int
+	Token    string
+}
+type Observer struct {
+	AttemptStarted func(context.Context, Job) context.Context
+
+	AttemptFinished func(context.Context, Job, time.Duration, error)
+
+	SchedulesDispatched func(context.Context, int, time.Duration, error)
+}
+type Registry struct {
+	mu       sync.RWMutex
+	handlers map[string]registration
+}
+type Schedule struct {
+	Name     string
+	Kind     string
+	Payload  any
+	Interval time.Duration
+}
+type Scheduler struct {
+	store     schedulerStore
+	logger    *slog.Logger
+	cfg       SchedulerConfig
+	schedules []Schedule
+	registry  *Registry
+	observer  Observer
+
+	lifecycleMu sync.Mutex
+	mu          sync.Mutex
+	cancel      context.CancelFunc
+	done        chan struct{}
+	wg          sync.WaitGroup
+
+	running     atomic.Bool
+	failed      chan struct{}
+	failureMu   sync.Mutex
+	failureErr  error
+	failureOnce sync.Once
+}
+type SchedulerConfig struct {
+	Interval time.Duration `env:"INTERVAL,default=1s" envdoc:"Delay between due-schedule scans." validate:"gt=0"`
+
+	Batch int `env:"BATCH,default=20" envdoc:"Maximum number of due schedules dispatched per scan." validate:"gte=1"`
+}
+type SchedulerOption func(*schedulerOptions)
+type Store struct {
+	pool *pgxpool.Pool
+}
+type Worker struct {
+	store      workerStore
+	registry   *Registry
+	logger     *slog.Logger
+	cfg        WorkerConfig
+	instanceID string
+	observer   Observer
+
+	lifecycleMu sync.Mutex
+	mu          sync.Mutex
+	claimCtx    context.Context
+	claim       context.CancelFunc
+	jobCtx      context.Context
+	job         context.CancelFunc
+	done        chan struct{}
+	wg          sync.WaitGroup
+
+	running     atomic.Bool
+	inFlight    atomic.Int64
+	failed      chan struct{}
+	failureMu   sync.Mutex
+	failureErr  error
+	failureOnce sync.Once
+}
+type WorkerConfig struct {
+	Concurrency int `env:"CONCURRENCY,default=4" envdoc:"Number of jobs claimed concurrently." validate:"gte=1"`
+
+	PollInterval time.Duration `env:"POLL_INTERVAL,default=500ms" envdoc:"Delay between empty queue polls." validate:"gt=0"`
+
+	JobTimeout time.Duration `env:"TIMEOUT,default=30s" envdoc:"Maximum duration of one job attempt." validate:"gt=0"`
+
+	StaleAfter time.Duration `env:"STALE_AFTER,default=2m" envdoc:"Age after which an abandoned running job is returned to the queue." validate:"gtfield=JobTimeout"`
+
+	RetryBase time.Duration `env:"RETRY_BASE,default=1s" envdoc:"Initial retry delay." validate:"gt=0"`
+
+	RetryMax time.Duration `env:"RETRY_MAX,default=1m" envdoc:"Maximum retry delay." validate:"gtefield=RetryBase"`
+}
+type WorkerOption func(*workerOptions)
+var ErrInvalidJobID = errors.New("job ID is invalid")
+var ErrInvalidLease = errors.New("job lease is invalid")
+var ErrLeaseLost = errors.New("job lease lost")
+var ErrNotFailed = errors.New("job is not in the failed state")
+var ErrNotFound = errors.New("job not found")
+var ErrStoreUnavailable = errors.New("job store is unavailable")
+
+package github.com/plinth-go/plinth/platform/jobs/admin
+func NewHandler(store Store, logger *slog.Logger) http.Handler
+type Store interface {
+	ListFailed(context.Context, int, int) ([]jobs.Job, error)
+	RetryFailed(context.Context, string) (jobs.Job, error)
+	DeleteFailed(context.Context, string) error
+}
+
+package github.com/plinth-go/plinth/platform/jobs/migrations
+func FS() fs.FS
+
+package github.com/plinth-go/plinth/platform/jwt
+func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
+func NewVerifier(cfg Config) (*Verifier, error)
+func ParsePublicKeyPEM(value []byte) (any, error)
+type Config struct {
+	Secret     []byte
+	PublicKey  any
+	Algorithms []string
+	Issuer     string
+	Audience   []string
+	Leeway     time.Duration
+}
+type Verifier struct {
+	key        any
+	algorithms []string
+	issuer     string
+	audience   []string
+	leeway     time.Duration
+}
+
+package github.com/plinth-go/plinth/platform/migrate
+func (m *Migrator) Name() string
+func (m *Migrator) Start(ctx context.Context) error
+func (m *Migrator) Stop(context.Context) error
+func New(url string, enabled bool, logger *slog.Logger, sources ...Migration) *Migrator
+type Migration struct {
+	Name string
+	FS   fs.FS
+}
+type Migrator struct {
+	url        string
+	enabled    bool
+	logger     *slog.Logger
+	migrations []Migration
+
+	mu      sync.Mutex
+	started bool
+	closed  bool
+}
+
+package github.com/plinth-go/plinth/platform/objectstore
+func NormalizeKey(key string) (string, error)
+func NormalizePrefix(prefix string) (string, error)
+type Object struct {
+	Key         string
+	Size        int64
+	ContentType string
+	ModifiedAt  time.Time
+}
+type PutOptions struct {
+	ContentType  string
+	CacheControl string
+	Metadata     map[string]string
+}
+type Store interface {
+	Put(context.Context, string, io.Reader, int64, PutOptions) (Object, error)
+	Open(context.Context, string) (io.ReadCloser, Object, error)
+	Stat(context.Context, string) (Object, error)
+	Delete(context.Context, string) error
+	List(context.Context, string, int) ([]Object, error)
+}
+var ErrNotFound = errors.New("object not found")
+
+package github.com/plinth-go/plinth/platform/objectstore/localfs
+func (s *Store) Delete(ctx context.Context, key string) error
+func (s *Store) List(ctx context.Context, prefix string, limit int) ([]objectstore.Object, error)
+func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, objectstore.Object, error)
+func (s *Store) Put(ctx context.Context, key string, body io.Reader, size int64, opts objectstore.PutOptions) (objectstore.Object, error)
+func (s *Store) Stat(ctx context.Context, key string) (objectstore.Object, error)
+func New(root string) (*Store, error)
+type Store struct {
+	root string
+}
+
+package github.com/plinth-go/plinth/platform/objectstore/s3
+func (s *Store) Delete(ctx context.Context, key string) error
+func (s *Store) List(ctx context.Context, prefix string, limit int) ([]objectstore.Object, error)
+func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, objectstore.Object, error)
+func (s *Store) Put(ctx context.Context, key string, source io.Reader, size int64, opts objectstore.PutOptions) (objectstore.Object, error)
+func (s *Store) Stat(ctx context.Context, key string) (objectstore.Object, error)
+func New(client API, cfg Config) (*Store, error)
+type API interface {
+	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	DeleteObject(context.Context, *s3.DeleteObjectInput, ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+}
+type Config struct {
+	Bucket string
+
+	Prefix string
+}
+type Store struct {
+	client API
+	bucket string
+	prefix string
+}
+
+package github.com/plinth-go/plinth/platform/observability/otel
+func (t *Tracer) Middleware(next http.Handler) http.Handler
+func New(provider trace.TracerProvider, cfg Config) (*Tracer, error)
+type Config struct {
+	TracerName string
+
+	Propagator propagation.TextMapPropagator
+
+	Skip func(*http.Request) bool
+}
+type Tracer struct {
+	tracer     trace.Tracer
+	propagator propagation.TextMapPropagator
+	skip       func(*http.Request) bool
+}
+
+package github.com/plinth-go/plinth/platform/observability/prometheus
+func (m *Metrics) Middleware(next http.Handler) http.Handler
+func New(registerer prom.Registerer, cfg Config) (*Metrics, error)
+type Config struct {
+	Namespace string
+
+	Subsystem string
+
+	DurationBuckets []float64
+
+	Skip func(*http.Request) bool
+}
+type Metrics struct {
+	requests  *prom.CounterVec
+	durations *prom.HistogramVec
+	inFlight  *prom.GaugeVec
+	skip      func(*http.Request) bool
+}
+
+package github.com/plinth-go/plinth/platform/oidc
+func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
+func NewVerifier(ctx context.Context, cfg Config) (*Verifier, error)
+type Config struct {
+	IssuerURL  string
+	ClientID   string
+	HTTPClient *http.Client
+}
+type Verifier struct {
+	verifier *coreoidc.IDTokenVerifier
+}
+
+package github.com/plinth-go/plinth/platform/postgres
+func (p *Postgres) Name() string
+func (p *Postgres) Ping(ctx context.Context) error
+func (p *Postgres) Pool() *pgxpool.Pool
+func (p *Postgres) Start(ctx context.Context) error
+func (p *Postgres) Stop(context.Context) error
+func IsUniqueViolation(err error) bool
+func New(ctx context.Context, databaseURL string) (*Postgres, error)
+type Postgres struct {
+	mu      sync.Mutex
+	pool    *pgxpool.Pool
+	started bool
+	closed  bool
+}
+
+package github.com/plinth-go/plinth/platform/ratelimit
+func (l *MemoryLimiter) Allow(ctx context.Context, key string) (Result, error)
+func DefaultKey(r *http.Request) (string, error)
+func New(cfg Config) (func(http.Handler) http.Handler, error)
+func NewMemory(limit int, window time.Duration) (*MemoryLimiter, error)
+func ValidateKey(key string) error
+type Config struct {
+	Limiter Limiter
+	Logger  *slog.Logger
+
+	Key  func(*http.Request) (string, error)
+	Skip func(*http.Request) bool
+}
+type Limiter interface {
+	Allow(context.Context, string) (Result, error)
+}
+type MemoryLimiter struct {
+	mu         sync.Mutex
+	limit      int
+	window     time.Duration
+	entries    map[string]memoryEntry
+	maxEntries int
+	lastSweep  time.Time
+	now        func() time.Time
+}
+type Result struct {
+	Allowed    bool
+	Limit      int
+	Remaining  int
+	ResetAt    time.Time
+	RetryAfter time.Duration
+}
+
+package github.com/plinth-go/plinth/platform/ratelimit/redis
+const MinimumRedisVersion = "2.6.0"
+const StrategyCommands Strategy = "commands"
+const StrategyScript Strategy = "script"
+func (l *Limiter) Allow(ctx context.Context, key string) (ratelimit.Result, error)
+func New(client redis.UniversalClient, cfg Config) (*Limiter, error)
+type Config struct {
+	Prefix       string
+	Limit        int
+	Window       time.Duration
+	Strategy     Strategy
+	RedisVersion string
+}
+type Limiter struct {
+	client   redis.UniversalClient
+	prefix   string
+	limit    int
+	window   time.Duration
+	strategy Strategy
+}
+type Strategy string
+
+package github.com/plinth-go/plinth/platform/redis
+func (r *Redis) Client() *goredis.Client
+func (r *Redis) Name() string
+func (r *Redis) Ping(ctx context.Context) error
+func (r *Redis) Start(ctx context.Context) error
+func (r *Redis) Stop(context.Context) error
+func New(redisURL string) (*Redis, error)
+type Redis struct {
+	mu      sync.Mutex
+	client  *goredis.Client
+	started bool
+	closed  bool
+}
+
+package github.com/plinth-go/plinth/platform/redislock
+const MinimumRedisVersion = "2.6.12"
+const StrategyCommands Strategy = "commands"
+const StrategyScript Strategy = "script"
+func (l *Lock) Key() string
+func (l *Lock) Refresh(ctx context.Context, ttl time.Duration) error
+func (l *Lock) Release(ctx context.Context) error
+func (l *Locker) Acquire(ctx context.Context, key string, ttl time.Duration) (*Lock, error)
+func (l *Locker) AcquireWait(ctx context.Context, key string, ttl, wait, retryInterval time.Duration) (*Lock, error)
+func New(client redis.UniversalClient, cfg Config) (*Locker, error)
+type Config struct {
+	Prefix string
+
+	Strategy Strategy
+
+	RedisVersion string
+}
+type Lock struct {
+	locker *Locker
+	key    string
+	token  string
+}
+type Locker struct {
+	client   redis.UniversalClient
+	prefix   string
+	strategy Strategy
+}
+type Strategy string
+var ErrLockLost = errors.New("redis lock lease was lost")
+var ErrLocked = errors.New("redis lock is held")
+
+package github.com/plinth-go/plinth/platform/session
+func (m *Manager) Middleware(next http.Handler) http.Handler
+func New(store Store, cfg Config) (*Manager, error)
+func NewMemoryStore() Store
+type Config struct {
+	Lifetime    time.Duration
+	IdleTimeout time.Duration
+	CookieName  string
+	Domain      string
+	Path        string
+	SameSite    http.SameSite
+	Secure      bool
+	Partitioned bool
+
+	NoPersist bool
+	Logger    *slog.Logger
+}
+type Manager struct {
+	*scs.SessionManager
+}
+type Store = scs.Store
+
+package github.com/plinth-go/plinth/platform/session/redis
+func (s *Store) Commit(token string, value []byte, expiry time.Time) error
+func (s *Store) CommitCtx(ctx context.Context, token string, value []byte, expiry time.Time) error
+func (s *Store) Delete(token string) error
+func (s *Store) DeleteCtx(ctx context.Context, token string) error
+func (s *Store) Find(token string) ([]byte, bool, error)
+func (s *Store) FindCtx(ctx context.Context, token string) ([]byte, bool, error)
+func NewStore(client goredis.UniversalClient, prefix string) (*Store, error)
+type Store struct {
+	client goredis.UniversalClient
+	prefix string
+}
+
+package github.com/plinth-go/plinth/runtime
+func (h *HTTP) Failed() <-chan struct{}
+func (h *HTTP) Failure() error
+func (h *HTTP) Name() string
+func (h *HTTP) Start(ctx context.Context) error
+func (h *HTTP) Stop(ctx context.Context) error
+func (r *Runtime) Add(components ...Component)
+func (r *Runtime) Run(ctx context.Context) error
+func DefaultHTTPConfig() HTTPConfig
+func New(logger *slog.Logger, timeout time.Duration) *Runtime
+func NewHTTP(addr string, handler http.Handler, streams StreamCloser, logger *slog.Logger, options ...HTTPOption) *HTTP
+func WithHTTPConfig(config HTTPConfig) HTTPOption
+type Component interface {
+	Name() string
+	Start(context.Context) error
+	Stop(context.Context) error
+}
+type FailureReporter interface {
+	Failed() <-chan struct{}
+	Failure() error
+}
+type HTTP struct {
+	addr    string
+	handler http.Handler
+	logger  *slog.Logger
+	streams StreamCloser
+	config  httpServerSettings
+
+	mu         sync.Mutex
+	srv        *http.Server
+	listener   net.Listener
+	baseCancel context.CancelFunc
+	failed     chan struct{}
+	serveErr   error
+	closed     bool
+}
+type HTTPConfig struct {
+	ReadHeaderTimeout time.Duration
+
+	ReadTimeout time.Duration
+
+	IdleTimeout time.Duration
+
+	MaxHeaderBytes int
+
+	TLSCertFile string
+	TLSKeyFile  string
+
+	TLSConfig *tls.Config
+
+	EnableHTTP2 bool
+
+	Protocols *http.Protocols
+
+	Listen func(ctx context.Context, network, address string) (net.Listener, error)
+
+	ConfigureServer func(*http.Server) error
+}
+type HTTPOption func(*httpServerSettings)
+type Runtime struct {
+	logger     *slog.Logger
+	timeout    time.Duration
+	components []Component
+
+	mu      sync.Mutex
+	running bool
+	ran     bool
+}
+type StreamCloser interface {
+	CloseStreams()
+}
+
+package github.com/plinth-go/plinth/utils
+func NonNilSlice[T any](values []T) []T
+func NormalizePage(limit, offset, defaultLimit, maxLimit int) (int, int)
+
+package github.com/plinth-go/plinth/webui
+func Assets() fs.FS
+func FS(fallback fs.FS, override string) (fs.FS, error)
+func Handler(fallback fs.FS, override string) (http.Handler, error)

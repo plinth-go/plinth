@@ -1,0 +1,331 @@
+// Command plinth-docgen extracts operation and field descriptions from Go
+// comments into a generated manifest. The runtime never reads source files.
+package main
+
+import (
+	"bytes"
+	"errors"
+	"flag"
+	"fmt"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/plinth-go/plinth/internal/atomicfile"
+)
+
+type operation struct {
+	summary     string
+	description string
+}
+
+func main() {
+	os.Exit(cli(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func cli(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("plinth-docgen", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	root := flags.String("root", ".", "module root")
+	out := flags.String("out", "internal/generated/docs_gen.go", "generated Go file")
+	check := flags.Bool("check", false, "verify that the generated file is current")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() != 0 {
+		fmt.Fprintln(stderr, "plinth-docgen: unexpected arguments:", strings.Join(flags.Args(), " "))
+		return 2
+	}
+
+	if err := runWithOutput(*root, *out, *check, stdout); err != nil {
+		fmt.Fprintln(stderr, "plinth-docgen:", err)
+		return 1
+	}
+	return 0
+}
+
+func run(root, out string, check bool) error {
+	return runWithOutput(root, out, check, os.Stdout)
+}
+
+func runWithOutput(root, out string, check bool, stdout io.Writer) error {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	module, err := readModulePath(filepath.Join(rootAbs, "go.mod"))
+	if err != nil {
+		return err
+	}
+
+	operations := map[string]operation{}
+	fields := map[string]string{}
+	fset := token.NewFileSet()
+	err = filepath.WalkDir(rootAbs, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			name := entry.Name()
+			if path != rootAbs && (strings.HasPrefix(name, ".") || name == "vendor" || name == "testdata") {
+				return filepath.SkipDir
+			}
+			if path != rootAbs {
+				info, err := os.Stat(filepath.Join(path, "go.mod"))
+				switch {
+				case err == nil && info.Mode().IsRegular():
+					return filepath.SkipDir
+				case err != nil && !os.IsNotExist(err):
+					return err
+				}
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if err != nil {
+			return fmt.Errorf("parse %s: %w", path, err)
+		}
+		rel, err := filepath.Rel(rootAbs, filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		pkgPath := module
+		if rel != "." {
+			pkgPath += "/" + filepath.ToSlash(rel)
+		}
+
+		for _, declaration := range file.Decls {
+			switch declaration := declaration.(type) {
+			case *ast.FuncDecl:
+				doc, ok := splitDoc(declaration.Doc)
+				if !ok {
+					continue
+				}
+				name := declaration.Name.Name
+				if declaration.Recv != nil && len(declaration.Recv.List) > 0 {
+					receiver := receiverName(declaration.Recv.List[0].Type)
+					if receiver == "" {
+						continue
+					}
+					name = receiver + "." + name
+				}
+				operations[pkgPath+"."+name] = doc
+			case *ast.GenDecl:
+				if declaration.Tok != token.TYPE {
+					continue
+				}
+				for _, spec := range declaration.Specs {
+					typeSpec, ok := spec.(*ast.TypeSpec)
+					if !ok {
+						continue
+					}
+					structType, ok := typeSpec.Type.(*ast.StructType)
+					if !ok {
+						continue
+					}
+					for _, field := range structType.Fields.List {
+						text, ok := joinDoc(field.Doc)
+						if !ok {
+							text, ok = joinDoc(field.Comment)
+						}
+						if !ok {
+							continue
+						}
+						for _, name := range field.Names {
+							fields[pkgPath+"."+typeSpec.Name.Name+"."+name.Name] = text
+						}
+					}
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	source, err := render(operations, fields)
+	if err != nil {
+		return err
+	}
+	if check {
+		existing, err := os.ReadFile(out)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("%s is missing; run go generate", out)
+			}
+			return fmt.Errorf("read %s: %w", out, err)
+		}
+		if !bytes.Equal(existing, source) {
+			return fmt.Errorf("%s is stale; run go generate", out)
+		}
+		fmt.Fprintf(stdout, "plinth-docgen: %d operations, %d fields are current in %s\n", len(operations), len(fields), out)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
+	}
+	if err := atomicfile.Replace(out, source, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", out, err)
+	}
+	fmt.Fprintf(stdout, "plinth-docgen: %d operations, %d fields -> %s\n", len(operations), len(fields), out)
+	return nil
+}
+
+func render(operations map[string]operation, fields map[string]string) ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteString("// Code generated by plinth-docgen; DO NOT EDIT.\n\n")
+	buf.WriteString("package generated\n\n")
+	buf.WriteString("import \"github.com/plinth-go/plinth/kernel\"\n\n")
+	buf.WriteString("func Docs() kernel.DocSet {\n")
+	buf.WriteString("\treturn kernel.DocSet{\n")
+	buf.WriteString("\t\tOperations: map[string]kernel.OperationDoc{\n")
+	operationKeys := sortedKeys(operations)
+	for _, key := range operationKeys {
+		doc := operations[key]
+		fmt.Fprintf(&buf, "\t\t\t%s: {Summary: %s, Description: %s},\n",
+			strconv.Quote(key), strconv.Quote(doc.summary), strconv.Quote(doc.description))
+	}
+	buf.WriteString("\t\t},\n")
+	buf.WriteString("\t\tFields: map[string]string{\n")
+	for _, key := range sortedKeys(fields) {
+		fmt.Fprintf(&buf, "\t\t\t%s: %s,\n", strconv.Quote(key), strconv.Quote(fields[key]))
+	}
+	buf.WriteString("\t\t},\n")
+	buf.WriteString("\t}\n}\n")
+
+	source, err := format.Source(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("format generated source: %w", err)
+	}
+	return source, nil
+}
+
+func sortedKeys[T any](values map[string]T) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func readModulePath(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read go.mod: %w", err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if comment := strings.Index(line, "//"); comment >= 0 {
+			line = strings.TrimSpace(line[:comment])
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] != "module" {
+			continue
+		}
+		if len(fields) != 2 {
+			return "", fmt.Errorf("invalid module directive in %s", path)
+		}
+		module := fields[1]
+		if strings.HasPrefix(module, `"`) || strings.HasPrefix(module, "`") {
+			module, err = strconv.Unquote(module)
+			if err != nil {
+				return "", fmt.Errorf("invalid module path in %s: %w", path, err)
+			}
+		}
+		if module == "" {
+			return "", fmt.Errorf("empty module path in %s", path)
+		}
+		return module, nil
+	}
+	return "", fmt.Errorf("module directive not found in %s", path)
+}
+
+func receiverName(expr ast.Expr) string {
+	switch expr := expr.(type) {
+	case *ast.Ident:
+		return expr.Name
+	case *ast.StarExpr:
+		return receiverName(expr.X)
+	case *ast.IndexExpr:
+		return receiverName(expr.X)
+	case *ast.IndexListExpr:
+		return receiverName(expr.X)
+	default:
+		return ""
+	}
+}
+
+func splitDoc(group *ast.CommentGroup) (operation, bool) {
+	lines := commentLines(group)
+	if len(lines) == 0 {
+		return operation{}, false
+	}
+	split := len(lines)
+	for i, line := range lines {
+		if line == "" {
+			split = i
+			break
+		}
+	}
+	return operation{
+		summary:     strings.Join(lines[:split], " "),
+		description: strings.TrimSpace(strings.Join(lines[split:], "\n")),
+	}, true
+}
+
+func joinDoc(group *ast.CommentGroup) (string, bool) {
+	lines := commentLines(group)
+	if len(lines) == 0 {
+		return "", false
+	}
+	return strings.Join(lines, " "), true
+}
+
+func commentLines(group *ast.CommentGroup) []string {
+	if group == nil {
+		return nil
+	}
+	var lines []string
+	for _, comment := range group.List {
+		text := comment.Text
+		if strings.HasPrefix(text, "//") {
+			lines = append(lines, strings.TrimSpace(strings.TrimPrefix(text, "//")))
+			continue
+		}
+		text = strings.TrimPrefix(text, "/*")
+		text = strings.TrimSuffix(text, "*/")
+		for _, line := range strings.Split(text, "\n") {
+			lines = append(lines, strings.TrimSpace(strings.TrimPrefix(line, "*")))
+		}
+	}
+	filtered := lines[:0]
+	for _, line := range lines {
+		if strings.HasPrefix(line, "go:") || strings.HasPrefix(line, "+build") {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	for len(filtered) > 0 && filtered[0] == "" {
+		filtered = filtered[1:]
+	}
+	for len(filtered) > 0 && filtered[len(filtered)-1] == "" {
+		filtered = filtered[:len(filtered)-1]
+	}
+	return filtered
+}

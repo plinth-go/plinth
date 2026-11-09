@@ -1,0 +1,46 @@
+# Plinth
+
+> Plinth is a thin Go application kernel built on net/http. It owns typed HTTP binding, validation, RFC 9457 problems, OpenAPI, process lifecycle, and optional infrastructure adapters. Applications own business models and policy content.
+
+## Start here
+
+- [README](README.md): authoritative API and deployment reference.
+- [Examples index](examples/README.md): documentation-only, pseudo-code-friendly usage recipes.
+- [Minimal HTTP](examples/minimal-http.md): typed endpoints and binding.
+- [App shell](examples/app-shell.md): config, commands, logging, runtime.
+- [JWT + Postgres authz](examples/jwt-postgres-authz.md): Bearer auth, DB permissions, route enforcement.
+- [Declarative authz](examples/authz.md): permission tags and application policy sources.
+- [CSRF](examples/csrf.md): cookie/header protection and bootstrap token.
+- [CORS](examples/cors.md): explicit origin allowlist around the router.
+- [Rate limits](examples/ratelimit.md): memory and Redis fixed-window middleware.
+- [Sessions](examples/session.md): cookie-backed sessions and login/logout.
+- [Security order](examples/security.md): middleware composition only.
+- [Testing](examples/testing.md): testing application business logic with the real router.
+- [Optional platform](examples/optional-platform.md): Postgres, Redis, jobs, object storage.
+
+## Task lookup
+
+- Add CSRF: [examples/csrf.md](examples/csrf.md)
+- Add CORS: [examples/cors.md](examples/cors.md)
+- Add rate limiting: [examples/ratelimit.md](examples/ratelimit.md)
+- Add sessions/cookies: [examples/session.md](examples/session.md)
+- Add JWT + DB permissions: [examples/jwt-postgres-authz.md](examples/jwt-postgres-authz.md)
+- Add permission tags only: [examples/authz.md](examples/authz.md)
+- Decide middleware order: [examples/security.md](examples/security.md)
+
+## Contracts
+
+- [Contributor guide](CONTRIBUTING.md): architecture, dependency, configuration, and testing rules.
+- [Security boundary](SECURITY.md): framework-owned controls versus application/gateway responsibilities.
+- [Changelog](CHANGELOG.md): current release and development history.
+- [Public API snapshot](internal/apicheck/testdata/public-api.txt): exported declarations reviewed before release.
+- [Dependency boundary test](internal/depscheck/imports_test.go): which optional packages may pull which dependencies.
+
+## Notes for AI agents
+
+- Framework types and public identifiers in examples are real; examples may omit imports.
+- Unless a recipe demonstrates error handling, assume returned errors are nil and use `_`; keep code blocks near 15–35 lines.
+- Do not add business domains or demo CRUD. Keep optional placeholder SQL minimal and clearly application-owned.
+- Keep optional integrations out of core packages. Importing a core package must not link SCS, pgx, go-redis, Goose, JWT/OIDC, AWS, Prometheus, or OpenTelemetry.
+- Use `router.Handle`/`Group.Handle` for typed HTTP. Use raw handlers only for streaming, upgrades, files, or explicit response control.
+- Prefer the repository README and public API snapshot over the external `plinth-example` business application when deciding framework usage.

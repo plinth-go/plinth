@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  minimum-go:
+    name: Go 1.27.0 (minimum)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.0"
+          cache: true
+      - name: Verify minimum toolchain
+        run: |
+          go version
+          go mod tidy -diff
+          go test ./...
+          go vet ./...
+          go build ./...
+
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - name: Verify generated files
+        run: |
+          make generate
+          make fmt
+          make license-update
+          git diff --exit-code
+      - name: Run release checks
+        run: make release-check

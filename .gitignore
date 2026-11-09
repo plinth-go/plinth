@@ -1,0 +1,42 @@
+# Environment and local credentials
+.env
+.env.*
+!.env.example
+.envrc
+.mcp.json
+.mcp.local.json
+
+# Local-only agent, handoff, and maintainer notes
+AGENTS.md
+AGENTS.override.md
+HANDOFF.md
+HANDOFF.*.md
+*.local.md
+*.private.md
+.notes/
+docs/local/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# Build, test, and coverage artifacts
+bin/
+dist/
+coverage.out
+coverage.*
+*.test
+*.log
+*.prof
+*.tmp
+/plinth
+/plinth-migrate
+
+# Local Go workspace files
+go.work
+go.work.sum

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plinth · application kernel</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">PLINTH / APPLICATION KERNEL</p>
+      <h1>薄层装配，清晰边界。</h1>
+      <p class="lede">HTTP、后台任务、Postgres、Redis、迁移与运维端点都已装配。业务代码从这里开始。</p>
+      <nav>
+        <a href="/docs/">Swagger UI</a>
+        <a href="/openapi.json">OpenAPI 3.1</a>
+        <a href="/readyz">Readiness</a>
+      </nav>
+    </header>
+
+    <section class="grid" aria-label="Framework capabilities">
+      <article>
+        <h2>SSE</h2>
+        <p>由标准库直接输出长连接事件流，停机时主动结束。</p>
+        <button id="sse-start">开始接收</button>
+        <pre id="sse-log" aria-live="polite">idle</pre>
+      </article>
+      <article>
+        <h2>WebSocket</h2>
+        <p>连接登记到统一流注册表，消息回显用于验证升级链路。</p>
+        <button id="ws-start">连接</button>
+        <pre id="ws-log" aria-live="polite">idle</pre>
+      </article>
+      <article>
+        <h2>Batch export</h2>
+        <p>直接流式输出 CSV，不把整份文件堆进内存。</p>
+        <a class="button" href="/demo/export.csv">下载 CSV</a>
+      </article>
+    </section>
+
+    <footer>
+      <span>Go 1.27+</span>
+      <span>net/http</span>
+      <span>Postgres jobs</span>
+      <span>Redis ready</span>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

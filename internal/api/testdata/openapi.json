@@ -1,0 +1,474 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plinth",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/demo/events": {
+      "get": {
+        "operationId": "get--demo-events",
+        "summary": "events streams a heartbeat using server-sent events.",
+        "description": "The request remains owned by the framework stream registry so shutdown is bounded.",
+        "tags": [
+          "demo"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/export.csv": {
+      "get": {
+        "operationId": "get--demo-export.csv",
+        "summary": "exportCSV streams a small technical export.",
+        "description": "The response sets text/csv and an attachment filename without buffering the file.",
+        "tags": [
+          "demo"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/response-headers": {
+      "get": {
+        "operationId": "get--demo-response-headers",
+        "summary": "responseHeaders demonstrates per-response headers while keeping a typed body.",
+        "tags": [
+          "demo"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "request_id": {
+                      "description": "Request ID propagated by the framework middleware.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/ws": {
+      "get": {
+        "operationId": "get--demo-ws",
+        "summary": "websocket upgrades a connection and echoes messages.",
+        "description": "Read deadlines keep abandoned clients from pinning resources indefinitely.",
+        "tags": [
+          "demo"
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs": {
+      "post": {
+        "operationId": "post--v1-jobs",
+        "summary": "enqueueJob creates a durable job.",
+        "description": "The framework only accepts kinds with a registered typed handler; arbitrary\npayload execution is not exposed.",
+        "tags": [
+          "jobs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "description": "Kind must have a handler registered in the jobs.Registry.",
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "max_attempts": {
+                    "description": "Optional retry ceiling; defaults to three attempts.",
+                    "maximum": 20,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "payload": {
+                    "description": "Payload is decoded into the typed value accepted by that handler."
+                  },
+                  "run_at": {
+                    "description": "Optional earliest execution time; omit to run immediately.",
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "attempts": {
+                      "description": "Number of attempts already claimed.",
+                      "type": "integer"
+                    },
+                    "created_at": {
+                      "description": "Creation timestamp.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Stable UUID assigned when the job is enqueued.",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "description": "Registered job kind used to select the typed handler.",
+                      "type": "string"
+                    },
+                    "last_error": {
+                      "description": "Last execution error, if any. Persisted messages are UTF-8 safe and capped at 4096 bytes.",
+                      "type": "string"
+                    },
+                    "max_attempts": {
+                      "description": "Maximum attempts before the job becomes permanently failed.",
+                      "type": "integer"
+                    },
+                    "payload": {
+                      "description": "Opaque JSON payload decoded by the registered handler."
+                    },
+                    "run_at": {
+                      "description": "Earliest time at which a worker may claim the job.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "status": {
+                      "description": "Lifecycle state: pending, running, succeeded, or failed.",
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "description": "Last lifecycle transition timestamp.",
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "payload",
+                    "status",
+                    "run_at",
+                    "attempts",
+                    "max_attempts",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "operationId": "get--v1-jobs-by-id",
+        "summary": "getJob returns the durable lifecycle state of one job.",
+        "description": "The path identifier must be a UUID and is validated before the database call.",
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Job UUID returned by the enqueue endpoint.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "attempts": {
+                      "description": "Number of attempts already claimed.",
+                      "type": "integer"
+                    },
+                    "created_at": {
+                      "description": "Creation timestamp.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "description": "Stable UUID assigned when the job is enqueued.",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "description": "Registered job kind used to select the typed handler.",
+                      "type": "string"
+                    },
+                    "last_error": {
+                      "description": "Last execution error, if any. Persisted messages are UTF-8 safe and capped at 4096 bytes.",
+                      "type": "string"
+                    },
+                    "max_attempts": {
+                      "description": "Maximum attempts before the job becomes permanently failed.",
+                      "type": "integer"
+                    },
+                    "payload": {
+                      "description": "Opaque JSON payload decoded by the registered handler."
+                    },
+                    "run_at": {
+                      "description": "Earliest time at which a worker may claim the job.",
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "status": {
+                      "description": "Lifecycle state: pending, running, succeeded, or failed.",
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "description": "Last lifecycle transition timestamp.",
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind",
+                    "payload",
+                    "status",
+                    "run_at",
+                    "attempts",
+                    "max_attempts",
+                    "created_at",
+                    "updated_at"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Problem": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    }
+  }
+}
