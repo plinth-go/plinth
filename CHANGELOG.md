@@ -4,10 +4,9 @@ All notable changes to Plinth are recorded here. Release tags use Semantic
 Versioning; the `vNNN` labels in the development notes are internal iteration
 numbers, not module versions.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-09
 
-The first stable release is still prepared as `v1.0.0`; the tag is created only
-after the release checklist passes and publication is explicitly authorized.
+First stable release of the Plinth application kernel.
 
 ### Changed
 
