@@ -1,5 +1,5 @@
 // Package jobs provides backend-neutral durable job and schedule contracts,
-// workers, and schedulers. Database adapters such as platform/jobs/postgres
+// workers, and schedulers. Database adapters such as platform/pgjobs
 // provide the actual store implementation.
 package jobs
 

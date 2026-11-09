@@ -23,8 +23,8 @@ func run(ctx context.Context) error {
     _ = app.LoadEnv(ctx, &cfg, app.WithEnvPrefix("MYAPP"))
     logger := slog.Default()
 
-    pg, _ := postgres.New(ctx, cfg.DatabaseURL)
-    verifier, _ := jwt.NewVerifier(jwt.Config{
+    pg, _ := pgdb.New(ctx, cfg.DatabaseURL)
+    verifier, _ := jwtauth.NewVerifier(jwtauth.Config{
         Secret:     []byte(cfg.JWTSecret),
         Algorithms: []string{"HS256"},
     })

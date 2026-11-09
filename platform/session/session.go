@@ -1,5 +1,5 @@
 // Package session provides cookie-backed sessions with automatic save through
-// alexedwards/scs. Redis persistence lives in the optional platform/session/redis
+// alexedwards/scs. Redis persistence lives in the optional platform/redissession
 // subpackage; applications that do not import it do not link go-redis.
 package session
 

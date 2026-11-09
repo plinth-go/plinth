@@ -1,6 +1,6 @@
 // Package ratelimit provides a small fixed-window limiter contract and an
 // HTTP middleware. Its memory implementation is process-local; the optional
-// platform/ratelimit/redis subpackage coordinates across instances.
+// platform/redislimit subpackage coordinates across instances.
 package ratelimit
 
 import (

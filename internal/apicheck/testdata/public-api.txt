@@ -347,7 +347,7 @@ type Parser struct {
 	contentType string
 }
 
-package github.com/plinth-go/plinth/kernel/websocket
+package github.com/plinth-go/plinth/kernel/wshub
 func (h *Hub) Serve(w http.ResponseWriter, req *http.Request, fn func(context.Context, *gorilla.Conn) error) (err error)
 func NewHub(streams *kernel.StreamRegistry, logger *slog.Logger) *Hub
 func NormalizeError(err error) error
@@ -423,7 +423,7 @@ type Store interface {
 	Delete(context.Context, string) error
 }
 
-package github.com/plinth-go/plinth/platform/csrf/redis
+package github.com/plinth-go/plinth/platform/rediscsrf
 func (s *Store) Delete(ctx context.Context, id string) error
 func (s *Store) Exists(ctx context.Context, id string) (bool, error)
 func (s *Store) Put(ctx context.Context, id string, ttl time.Duration) error
@@ -697,7 +697,7 @@ var ErrStoreUnavailable = errors.New("job store is unavailable")
 package github.com/plinth-go/plinth/platform/jobs/migrations
 func FS() fs.FS
 
-package github.com/plinth-go/plinth/platform/jobs/postgres
+package github.com/plinth-go/plinth/platform/pgjobs
 func (s *Store) Claim(ctx context.Context, workerID string) (*jobs.Job, error)
 func (s *Store) DeleteFailed(ctx context.Context, id string) error
 func (s *Store) DisableSchedulesExcept(ctx context.Context, names []string) error
@@ -718,7 +718,7 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
-package github.com/plinth-go/plinth/platform/jwt
+package github.com/plinth-go/plinth/platform/jwtauth
 func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
 func NewVerifier(cfg Config) (*Verifier, error)
 func ParsePublicKeyPEM(value []byte) (any, error)
@@ -769,7 +769,7 @@ type Migrator struct {
 	closed  bool
 }
 
-package github.com/plinth-go/plinth/platform/migrate/postgres
+package github.com/plinth-go/plinth/platform/pgmigrate
 const IdentifierLimit = 63
 func New(url string, enabled bool, logger *slog.Logger, sources ...migrate.Migration) *migrate.Migrator
 
@@ -807,7 +807,7 @@ type Store struct {
 	root string
 }
 
-package github.com/plinth-go/plinth/platform/objectstore/s3
+package github.com/plinth-go/plinth/platform/objectstore/s3store
 func (s *Store) Delete(ctx context.Context, key string) error
 func (s *Store) List(ctx context.Context, prefix string, limit int) ([]objectstore.Object, error)
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, objectstore.Object, error)
@@ -832,7 +832,7 @@ type Store struct {
 	prefix string
 }
 
-package github.com/plinth-go/plinth/platform/observability/otel
+package github.com/plinth-go/plinth/platform/observability/oteltrace
 func (t *Tracer) Middleware(next http.Handler) http.Handler
 func New(provider trace.TracerProvider, cfg Config) (*Tracer, error)
 type Config struct {
@@ -848,7 +848,7 @@ type Tracer struct {
 	skip       func(*http.Request) bool
 }
 
-package github.com/plinth-go/plinth/platform/observability/prometheus
+package github.com/plinth-go/plinth/platform/observability/prommetrics
 func (m *Metrics) Middleware(next http.Handler) http.Handler
 func New(registerer prom.Registerer, cfg Config) (*Metrics, error)
 type Config struct {
@@ -867,7 +867,7 @@ type Metrics struct {
 	skip      func(*http.Request) bool
 }
 
-package github.com/plinth-go/plinth/platform/oidc
+package github.com/plinth-go/plinth/platform/oidcauth
 func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
 func NewVerifier(ctx context.Context, cfg Config) (*Verifier, error)
 type Config struct {
@@ -879,7 +879,7 @@ type Verifier struct {
 	verifier *coreoidc.IDTokenVerifier
 }
 
-package github.com/plinth-go/plinth/platform/postgres
+package github.com/plinth-go/plinth/platform/pgdb
 func (p *Postgres) Name() string
 func (p *Postgres) Ping(ctx context.Context) error
 func (p *Postgres) Pool() *pgxpool.Pool
@@ -927,7 +927,7 @@ type Result struct {
 	RetryAfter time.Duration
 }
 
-package github.com/plinth-go/plinth/platform/ratelimit/redis
+package github.com/plinth-go/plinth/platform/redislimit
 const MinimumRedisVersion = "2.6.0"
 const StrategyCommands Strategy = "commands"
 const StrategyScript Strategy = "script"
@@ -949,7 +949,7 @@ type Limiter struct {
 }
 type Strategy string
 
-package github.com/plinth-go/plinth/platform/redis
+package github.com/plinth-go/plinth/platform/redisclient
 func (r *Redis) Client() *goredis.Client
 func (r *Redis) Name() string
 func (r *Redis) Ping(ctx context.Context) error
@@ -1016,7 +1016,7 @@ type Manager struct {
 }
 type Store = scs.Store
 
-package github.com/plinth-go/plinth/platform/session/redis
+package github.com/plinth-go/plinth/platform/redissession
 func (s *Store) Commit(token string, value []byte, expiry time.Time) error
 func (s *Store) CommitCtx(ctx context.Context, token string, value []byte, expiry time.Time) error
 func (s *Store) Delete(token string) error

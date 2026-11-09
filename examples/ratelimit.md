@@ -16,11 +16,11 @@ router.Use(throttle)
 多实例把 limiter 换成 Redis，HTTP 接线不变：
 
 ```go
-limiter, _ := ratelimitredis.New(redisClient, ratelimitredis.Config{
+limiter, _ := redislimit.New(redisClient, redislimit.Config{
     Prefix:       "myapp:ratelimit:",
     Limit:        600,
     Window:       time.Minute,
-    Strategy:     ratelimitredis.StrategyCommands, // EVAL 被禁用时
+    Strategy:     redislimit.StrategyCommands, // EVAL 被禁用时
     RedisVersion: "7.2.4",
 })
 ```

@@ -20,11 +20,16 @@ Plinth 使用 Semantic Versioning 发布 Go module。开发记录里的 `v177`�
 
 ## 公开 API 范围
 
-公开 API 指这些包的导出声明：`app`、`kernel`、`kernel/websocket`、`logging`、
-`platform/jobs`、`platform/jobs/admin`、`platform/jobs/jobutil`、
-`platform/jobs/migrations`、`platform/jobs/postgres`、`platform/migrate`、
-`platform/migrate/postgres`、`platform/postgres`、`platform/redis`、`runtime`、
-`utils`、`webui`。
+公开 API 指这些包的导出声明：`app`、`kernel`、`kernel/auth`、`kernel/authz`、
+`kernel/cors`、`kernel/uploads`、`kernel/wshub`、`logging`、`platform/csrf`、
+`platform/rediscsrf`、`platform/idempotency`、`platform/jobs`、
+`platform/jobs/admin`、`platform/jobs/jobutil`、`platform/jobs/migrations`、
+`platform/pgjobs`、`platform/jwtauth`、`platform/migrate`、`platform/pgmigrate`、
+`platform/objectstore`、`platform/objectstore/localfs`、`platform/objectstore/s3store`、
+`platform/observability/oteltrace`、`platform/observability/prommetrics`、
+`platform/oidcauth`、`platform/pgdb`、`platform/ratelimit`、`platform/redislimit`、
+`platform/redisclient`、`platform/redislock`、`platform/session`、
+`platform/redissession`、`runtime`、`utils`、`webui`。
 
 - 包括导出的类型、字段、函数、方法、常量、变量和嵌入契约。
 - 不包括 `internal/`、`cmd/`、参考应用、测试代码、生成文件内部结构和未导出类型上的
