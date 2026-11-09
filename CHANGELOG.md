@@ -4,6 +4,20 @@ All notable changes to Plinth are recorded here. Release tags use Semantic
 Versioning; the `vNNN` labels in the development notes are internal iteration
 numbers, not module versions.
 
+## [Unreleased]
+
+### Added
+
+- A runnable `examples/hello` quickstart with a real-server HTTP test.
+- `actionlint` and `govulncheck` in the required release gate, plus CodeQL
+  default setup for Go and GitHub Actions.
+- CI, Go Reference, license, and latest-release badges in the README.
+
+### Changed
+
+- Post-release documentation now installs the published module with `go get`
+  instead of requiring a local `replace` directive.
+
 ## [1.0.0] - 2026-11-09
 
 First stable release of the Plinth application kernel.

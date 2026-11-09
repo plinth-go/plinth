@@ -97,8 +97,8 @@ cannot push, run the commands manually on the PR branch before merging.
   changes require a major-version decision.
 - Business models belong in the consuming application, not in the framework or
   the reference `internal/api` tree.
-- Examples under `examples/` are documentation. Keep them short and current;
-  they are not a separate runnable product.
+- Most files under `examples/` are documentation. `examples/hello` is the one
+  runnable quickstart; keep it dependency-free and covered by `go test ./...`.
 
 ## Tests and compatibility
 
