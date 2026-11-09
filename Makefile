@@ -3,7 +3,7 @@ GOFMT ?= gofmt
 GO_LICENSES_VERSION ?= v1.6.0
 ALLOWED_LICENSES ?= Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,BSL-1.0,Unlicense
 
-.PHONY: all generate fmt docscheck golden check test vet build bench fuzz api-check api-update race license-check license-update release-check run clean
+.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz api-check api-update race license-check license-update release-check run clean
 
 all: generate fmt check test vet build
 
@@ -22,6 +22,9 @@ golden:
 check: docscheck api-check
 	$(GO) run ./cmd/plinth check
 	$(GO) test ./internal/api -run TestOpenAPIUsesGeneratedCommentDocs
+
+dco-check:
+	./scripts/check-dco.sh "$${DCO_BASE:-origin/main}" HEAD
 
 test:
 	$(GO) test ./...
