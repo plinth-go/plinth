@@ -49,6 +49,25 @@ make release-check
 license compatibility, the regular test suite, `go vet`, both binary builds,
 the full race suite, and both fuzz targets.
 
+## Dependency updates and generated files
+
+Dependency changes must not leave generated files stale. After any `go.mod` or
+`go.sum` change, run:
+
+```sh
+make license-update
+git add THIRD_PARTY_NOTICES.md
+git commit -s -m "chore(deps): refresh generated files"
+```
+
+Do not edit `THIRD_PARTY_NOTICES.md` by hand.
+
+For Dependabot pull requests, the `Dependabot autofix` workflow handles this
+automatically. When the `Release gate` fails, it runs `make license-update` on
+the PR branch, commits as `github-actions[bot]`, and re-dispatches CI. The
+workflow is limited to branches owned by `dependabot[bot]` in this repository.
+If it cannot push, run the commands manually on the PR branch before merging.
+
 ## Design constraints
 
 - Plinth is an application kernel, not a complete web framework.
@@ -76,6 +95,9 @@ the full race suite, and both fuzz targets.
 - Keep allocation budgets in `kernel/budget_test.go` meaningful; do not relax a
   budget just to make a test pass.
 - Run `go mod tidy` after dependency changes, and keep `go.sum` consistent.
+- Refresh `THIRD_PARTY_NOTICES.md` with `make license-update` after dependency
+  changes; Dependabot PRs are handled by the autofix workflow, but the result
+  must still be green before merging.
 
 ## Security
 

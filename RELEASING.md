@@ -87,6 +87,9 @@ go test -race ./... -count=1
 `make license-update` 生成到 `THIRD_PARTY_NOTICES.md`，发布前应与 `go.mod`/`go.sum`
 的变更一起 review。
 
+Dependabot PR 的生成文件同步由 `.github/workflows/dependabot-autofix.yml`
+自动处理；发布前仍应确认 `THIRD_PARTY_NOTICES.md` 与 `go.mod`/`go.sum` 一致。
+
 ## 发布步骤
 
 1. 确认版本号和 `CHANGELOG.md` 与公开 API diff 一致。
