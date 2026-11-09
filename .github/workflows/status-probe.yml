@@ -1,7 +1,8 @@
 name: Status probe
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [tmp/status-bot-probe]
 
 permissions:
   statuses: write
