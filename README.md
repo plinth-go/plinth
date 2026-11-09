@@ -1,5 +1,12 @@
 # Plinth
 
+<p>
+  <a href="https://github.com/plinth-go/plinth/actions/workflows/ci.yml"><img src="https://github.com/plinth-go/plinth/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://pkg.go.dev/github.com/plinth-go/plinth"><img src="https://pkg.go.dev/badge/github.com/plinth-go/plinth.svg" alt="Go Reference"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://github.com/plinth-go/plinth/releases/latest"><img src="https://img.shields.io/github/v/release/plinth-go/plinth?display_name=tag&amp;sort=semver" alt="Latest release"></a>
+</p>
+
 `plinth` /plɪnθ/ 是建筑里的“基座”。这个名字对应本项目的定位：不替业务写墙和屋顶，只提供一个稳定、薄、可替换的底层装配面。
 
 它不是 Gin/Huma 那类完整 Web 框架，而是一个由小型公开包组成的 **Go 1.27 应用内核**。应用通过正常的 `go import` 引入 `kernel`、`runtime`、`app` 等核心薄层，并按需引入 WebSocket、Postgres、Redis 或迁移子包，再在自己的仓库里组织业务代码。
