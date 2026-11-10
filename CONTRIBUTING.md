@@ -135,8 +135,9 @@ API or behavior-contract impact. Directional work is tracked in `ROADMAP.md`.
   changes require a major-version decision.
 - Business models belong in the consuming application, not in the framework or
   the reference `internal/api` tree.
-- Most files under `examples/` are documentation. `examples/hello` is the one
-  runnable quickstart; keep it dependency-free and covered by `go test ./...`.
+- Most files under `examples/` are documentation. `examples/hello` is the
+  dependency-free quickstart and `examples/tls-http2` is the runnable TLS/HTTP2
+  deployment example; keep both covered by `go test ./...`.
 
 ## Tests and compatibility
 

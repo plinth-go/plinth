@@ -1,7 +1,9 @@
 # Runnable quickstart
 
-This is the single runnable example in `examples/`. It uses only the Plinth
-router and the standard library; it does not require Postgres or Redis.
+This is the dependency-free quickstart in `examples/`. It uses only the Plinth
+router and the standard library; it does not require Postgres or Redis. See
+[`../tls-http2/`](../tls-http2/README.md) for a runnable TLS and HTTP/2
+deployment example.
 
 From the repository root:
 

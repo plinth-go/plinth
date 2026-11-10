@@ -36,6 +36,7 @@ coverage.*
 *.tmp
 fuzz-results/
 bench-results/
+.dev-tls/
 /plinth
 /plinth-migrate
 
