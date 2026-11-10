@@ -1,0 +1,100 @@
+name: Benchmark report
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Benchmark samples per scenario
+        required: false
+        default: "6"
+        type: string
+      benchtime:
+        description: Go benchmark time per sample (for example 1s or 2s)
+        required: false
+        default: 1s
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: benchmark-report
+  cancel-in-progress: false
+
+jobs:
+  kernel:
+    name: Kernel benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BENCH_COUNT: ${{ github.event.inputs.count || '6' }}
+      BENCH_TIME: ${{ github.event.inputs.benchtime || '1s' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - name: Run representative benchmarks
+        run: make bench
+      - name: Describe noise handling
+        run: |
+          {
+            echo '## Kernel benchmark report'
+            echo
+            echo 'The report uses one CPU, six samples by default, and benchstat against the previous successful scheduled artifact.'
+            echo 'Investigate when a scenario is at least 10% slower with p <= 0.05 and a follow-up run confirms the change.'
+            echo 'Runner migrations and shared-host variance can dominate microbenchmarks, so this workflow reports trends and never blocks a pull request.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Download previous retained benchmark
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          previous_run=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/benchmarks.yml/runs?status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          if [ -z "$previous_run" ]; then
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo 'No previous successful benchmark run; this run establishes the first retained baseline.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          mkdir -p bench-baseline
+          if gh run download "$previous_run" --name benchmarks --dir bench-baseline; then
+            baseline=$(find bench-baseline -name bench.txt -print -quit)
+            if [ -n "$baseline" ]; then
+              {
+                echo 'available=true'
+                echo "path=$baseline"
+                echo "previous=$previous_run"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo 'available=false' >> "$GITHUB_OUTPUT"
+          echo '::warning::The previous benchmark artifact was unavailable; this run establishes a new retained baseline.'
+      - name: Compare with previous retained benchmark
+        if: steps.baseline.outputs.available == 'true'
+        run: |
+          {
+            echo
+            echo "Compared with [run ${{ steps.baseline.outputs.previous }}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ steps.baseline.outputs.previous }})."
+            echo
+            echo '```'
+            make bench-compare BENCH_BASE="${{ steps.baseline.outputs.path }}" BENCH_NEW=bench-results/bench.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: bench-results/
+          if-no-files-found: ignore
+          retention-days: 30

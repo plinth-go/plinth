@@ -35,6 +35,7 @@ coverage.*
 *.prof
 *.tmp
 fuzz-results/
+bench-results/
 /plinth
 /plinth-migrate
 

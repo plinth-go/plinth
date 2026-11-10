@@ -6,8 +6,14 @@ GOVULNCHECK_VERSION ?= v1.9.0
 ALLOWED_LICENSES ?= Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,BSL-1.0,Unlicense
 FUZZTIME ?= 5s
 FUZZTIME_EXTENDED ?= 1m
+BENCH_COUNT ?= 6
+BENCH_TIME ?= 1s
+BENCH_CPU ?= 1
+BENCH_BASE ?= bench-results/baseline.txt
+BENCH_NEW ?= bench-results/bench.txt
+BENCHSTAT_VERSION ?= v0.0.0-20261009192801-be2c69fb417e
 
-.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz fuzz-extended api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
+.PHONY: all generate fmt docscheck golden check dco-check test vet build bench bench-compare fuzz fuzz-extended api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
 
 all: generate fmt check test vet build
 
@@ -37,7 +43,10 @@ vet:
 	$(GO) vet ./...
 
 bench:
-	$(GO) test ./kernel -run '^$$' -bench 'BenchmarkHTTP' -benchmem -count=5
+	GO="$(GO)" BENCH_COUNT="$(BENCH_COUNT)" BENCH_TIME="$(BENCH_TIME)" BENCH_CPU="$(BENCH_CPU)" ./scripts/bench.sh
+
+bench-compare:
+	GO="$(GO)" BENCHSTAT_VERSION="$(BENCHSTAT_VERSION)" ./scripts/bench-compare.sh "$(BENCH_BASE)" "$(BENCH_NEW)"
 
 fuzz:
 	$(GO) test ./kernel -run '^$$' -fuzz '^FuzzStrictJSONBinding$$' -fuzztime=$(FUZZTIME) -count=1
