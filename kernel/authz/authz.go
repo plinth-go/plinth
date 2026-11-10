@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 // PermissionSource returns the effective permissions for the current request.
@@ -42,14 +43,8 @@ func New(source PermissionSource, cfg Config) (func(http.Handler) http.Handler, 
 	if isNil(source) {
 		return nil, errors.New("authz permission source is nil")
 	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	detail := strings.TrimSpace(cfg.DeniedDetail)
-	if detail == "" {
-		detail = "access denied"
-	}
+	logger := utils.IfNilElse(cfg.Logger, slog.Default())
+	detail := utils.IfEmptyElse(strings.TrimSpace(cfg.DeniedDetail), "access denied")
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			operation, ok := kernel.OperationFromContext(r.Context())

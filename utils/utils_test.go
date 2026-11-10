@@ -2,6 +2,54 @@ package utils
 
 import "testing"
 
+func TestIfElse(t *testing.T) {
+	if got := IfElse(true, "yes", "no"); got != "yes" {
+		t.Fatalf("IfElse(true) = %q", got)
+	}
+	if got := IfElse(false, "yes", "no"); got != "no" {
+		t.Fatalf("IfElse(false) = %q", got)
+	}
+}
+
+func TestIfNilElse(t *testing.T) {
+	value, fallback := 7, 9
+	if got := IfNilElse(&value, &fallback); got != &value {
+		t.Fatalf("IfNilElse(non-nil pointer) = %v", got)
+	}
+	if got := IfNilElse((*int)(nil), &fallback); got != &fallback {
+		t.Fatalf("IfNilElse(nil pointer) = %v", got)
+	}
+	type intPointer *int
+	var named intPointer
+	if got := IfNilElse(named, intPointer(&fallback)); got != intPointer(&fallback) {
+		t.Fatalf("IfNilElse(named pointer) = %v", got)
+	}
+}
+
+func TestIfEmptyElse(t *testing.T) {
+	type label string
+	if got := IfEmptyElse(label("configured"), label("fallback")); got != "configured" {
+		t.Fatalf("IfEmptyElse(non-empty) = %q", got)
+	}
+	if got := IfEmptyElse(label(""), label("fallback")); got != "fallback" {
+		t.Fatalf("IfEmptyElse(empty) = %q", got)
+	}
+	if got := IfEmptyElse(0, 42); got != 42 {
+		t.Fatalf("IfEmptyElse(zero int) = %d", got)
+	}
+	if got := IfEmptyElse(false, true); !got {
+		t.Fatal("IfEmptyElse(false) returned false")
+	}
+	type config struct{ Name string }
+	if got := IfEmptyElse(config{}, config{Name: "fallback"}); got.Name != "fallback" {
+		t.Fatalf("IfEmptyElse(zero struct) = %#v", got)
+	}
+	value := 7
+	if got := IfEmptyElse((*int)(nil), &value); got != &value {
+		t.Fatalf("IfEmptyElse(nil pointer) = %v", got)
+	}
+}
+
 func TestNonNilSlice(t *testing.T) {
 	if got := NonNilSlice[string](nil); got == nil || len(got) != 0 {
 		t.Fatalf("NonNilSlice(nil) = %#v", got)

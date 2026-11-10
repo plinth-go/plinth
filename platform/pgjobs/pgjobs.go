@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/plinth-go/plinth/platform/jobs"
 	"github.com/plinth-go/plinth/platform/jobs/jobutil"
+	"github.com/plinth-go/plinth/utils"
 )
 
 type Store struct {
@@ -345,10 +346,7 @@ func (s *Store) MarkInterrupted(ctx context.Context, lease jobs.Lease, cause err
 	if err := s.available(); err != nil {
 		return err
 	}
-	message := jobutil.ErrorMessage(cause)
-	if message == "" {
-		message = "worker interrupted"
-	}
+	message := utils.IfEmptyElse(jobutil.ErrorMessage(cause), "worker interrupted")
 	tag, err := s.pool.Exec(ctx, `
 		UPDATE plinth_jobs
 		SET status = 'pending',

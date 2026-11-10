@@ -16,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/plinth-go/plinth/utils"
 	"github.com/pressly/goose/v3"
 )
 
@@ -273,9 +274,6 @@ func migrationTableName(name string) string {
 			table.WriteByte('_')
 		}
 	}
-	normalized := strings.Trim(table.String(), "_")
-	if normalized == "" {
-		normalized = "app"
-	}
+	normalized := utils.IfEmptyElse(strings.Trim(table.String(), "_"), "app")
 	return "goose_version_" + normalized
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -41,9 +42,7 @@ func Middleware(store Store, cfg Config, logger *slog.Logger) (func(http.Handler
 	if store == nil {
 		return nil, errors.New("idempotency store is nil")
 	}
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	cfg, err := normalizeConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -137,9 +136,7 @@ func Middleware(store Store, cfg Config, logger *slog.Logger) (func(http.Handler
 
 func normalizeConfig(cfg Config) (Config, error) {
 	cfg.HeaderName = strings.TrimSpace(cfg.HeaderName)
-	if cfg.HeaderName == "" {
-		cfg.HeaderName = defaultHeaderName
-	}
+	cfg.HeaderName = utils.IfEmptyElse(cfg.HeaderName, defaultHeaderName)
 	if cfg.TTL == 0 {
 		cfg.TTL = defaultTTL
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/plinth-go/plinth/platform/internal/rediscompat"
 	"github.com/plinth-go/plinth/platform/ratelimit"
+	"github.com/plinth-go/plinth/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -73,10 +74,7 @@ func New(client redis.UniversalClient, cfg Config) (*Limiter, error) {
 	if cfg.Window < time.Millisecond {
 		return nil, errors.New("rate limit window must be at least 1ms for Redis")
 	}
-	strategy := cfg.Strategy
-	if strategy == "" {
-		strategy = StrategyScript
-	}
+	strategy := utils.IfEmptyElse(cfg.Strategy, StrategyScript)
 	if strategy != StrategyScript && strategy != StrategyCommands {
 		return nil, fmt.Errorf("unsupported rate limit strategy %q", strategy)
 	}

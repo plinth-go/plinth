@@ -17,6 +17,7 @@ import (
 
 	gorilla "github.com/gorilla/websocket"
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Hub upgrades WebSocket requests and registers connections with the framework
@@ -29,9 +30,7 @@ type Hub struct {
 
 // NewHub creates a WebSocket hub backed by streams.
 func NewHub(streams *kernel.StreamRegistry, logger *slog.Logger) *Hub {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	return &Hub{
 		streams: streams,
 		logger:  logger,
@@ -100,10 +99,7 @@ func (h *Hub) Serve(w http.ResponseWriter, req *http.Request, fn func(context.Co
 			if req.URL != nil {
 				path = req.URL.Path
 			}
-			logger := h.logger
-			if logger == nil {
-				logger = slog.Default()
-			}
+			logger := utils.IfNilElse(h.logger, slog.Default())
 			logger.Error("websocket callback panicked",
 				"method", req.Method,
 				"path", path,

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Headers embeds into JSON response structs to add dynamic headers without
@@ -106,12 +108,8 @@ func WriteAttachment(w http.ResponseWriter, filename, contentType string, write 
 	if write == nil {
 		return fmt.Errorf("attachment writer is required")
 	}
-	if filename == "" {
-		filename = "download"
-	}
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	filename = utils.IfEmptyElse(filename, "download")
+	contentType = utils.IfEmptyElse(contentType, "application/octet-stream")
 	if _, _, err := mime.ParseMediaType(contentType); err != nil {
 		return fmt.Errorf("invalid attachment content type %q: %w", contentType, err)
 	}
@@ -137,9 +135,7 @@ func WriteCSV(w http.ResponseWriter, filename string, header []string, rows func
 	if rows == nil {
 		return fmt.Errorf("CSV rows callback is required")
 	}
-	if filename == "" {
-		filename = "export.csv"
-	}
+	filename = utils.IfEmptyElse(filename, "export.csv")
 	return WriteAttachment(w, filename, "text/csv; charset=utf-8", func(dst io.Writer) error {
 		return WriteCSVTo(dst, header, rows)
 	})

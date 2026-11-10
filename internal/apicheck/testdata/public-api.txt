@@ -1102,6 +1102,9 @@ type StreamCloser interface {
 }
 
 package github.com/plinth-go/plinth/utils
+func IfElse[T any](condition bool, whenTrue, whenFalse T) T
+func IfEmptyElse[T comparable](value, fallback T) T
+func IfNilElse[T any, P ~*T](value, fallback P) P
 func NonNilSlice[T any](values []T) []T
 func NormalizePage(limit, offset, defaultLimit, maxLimit int) (int, int)
 

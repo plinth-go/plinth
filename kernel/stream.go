@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 var ErrStreamsClosed = errors.New("kernel: stream registry is closed")
@@ -88,10 +90,7 @@ func (r *StreamRegistry) CloseStreams() {
 func (r *StreamRegistry) closeStream(closeFn func()) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			logger := r.logger
-			if logger == nil {
-				logger = slog.Default()
-			}
+			logger := utils.IfNilElse(r.logger, slog.Default())
 			logger.Error("stream closer panicked",
 				"panic", recovered,
 				"stack", string(debug.Stack()),

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -164,18 +165,9 @@ func New(cfg Config) (func(http.Handler) http.Handler, error) {
 	if isNilStore(cfg.Store) {
 		return nil, errors.New("csrf store is nil")
 	}
-	cookieName := strings.TrimSpace(cfg.CookieName)
-	if cookieName == "" {
-		cookieName = defaultCookieName
-	}
-	headerName := strings.TrimSpace(cfg.HeaderName)
-	if headerName == "" {
-		headerName = defaultHeaderName
-	}
-	path := strings.TrimSpace(cfg.Path)
-	if path == "" {
-		path = "/"
-	}
+	cookieName := utils.IfEmptyElse(strings.TrimSpace(cfg.CookieName), defaultCookieName)
+	headerName := utils.IfEmptyElse(strings.TrimSpace(cfg.HeaderName), defaultHeaderName)
+	path := utils.IfEmptyElse(strings.TrimSpace(cfg.Path), "/")
 	if !strings.HasPrefix(path, "/") {
 		return nil, errors.New("csrf cookie path must start with /")
 	}
@@ -210,10 +202,7 @@ func New(cfg Config) (func(http.Handler) http.Handler, error) {
 		}
 		required[method] = true
 	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger := utils.IfNilElse(cfg.Logger, slog.Default())
 	tokenFunc := cfg.Token
 	if tokenFunc == nil {
 		tokenFunc = func(r *http.Request) string { return r.Header.Get(headerName) }

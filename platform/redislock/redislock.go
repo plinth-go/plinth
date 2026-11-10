@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/plinth-go/plinth/platform/internal/rediscompat"
+	"github.com/plinth-go/plinth/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -99,10 +100,7 @@ func New(client redis.UniversalClient, cfg Config) (*Locker, error) {
 	if strings.ContainsAny(prefix, "\r\n\x00") {
 		return nil, errors.New("redis lock prefix must not contain control characters")
 	}
-	strategy := cfg.Strategy
-	if strategy == "" {
-		strategy = StrategyScript
-	}
+	strategy := utils.IfEmptyElse(cfg.Strategy, StrategyScript)
 	if strategy != StrategyScript && strategy != StrategyCommands {
 		return nil, fmt.Errorf("unsupported redis lock strategy %q", strategy)
 	}

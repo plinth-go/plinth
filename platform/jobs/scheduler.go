@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 // SchedulerConfig controls due-schedule polling. Its env tags make it an
@@ -78,9 +80,7 @@ func NewScheduler(store SchedulerStore, logger *slog.Logger, cfg SchedulerConfig
 }
 
 func newScheduler(store SchedulerStore, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	logger = logger.With("component", "scheduler")
 	defaults := DefaultSchedulerConfig()
 	if cfg.Interval < 0 {

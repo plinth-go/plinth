@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/plinth-go/plinth/platform/observability/internal/response"
+	"github.com/plinth-go/plinth/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -38,10 +39,7 @@ func New(provider trace.TracerProvider, cfg Config) (*Tracer, error) {
 	if provider == nil {
 		return nil, errors.New("otel tracer provider is nil")
 	}
-	name := strings.TrimSpace(cfg.TracerName)
-	if name == "" {
-		name = "github.com/plinth-go/plinth/http"
-	}
+	name := utils.IfEmptyElse(strings.TrimSpace(cfg.TracerName), "github.com/plinth-go/plinth/http")
 	propagator := cfg.Propagator
 	if propagator == nil {
 		propagator = propagation.TraceContext{}

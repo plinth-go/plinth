@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/platform/objectstore"
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Store owns one directory tree.
@@ -268,9 +269,7 @@ func object(key string, info os.FileInfo, contentType string) objectstore.Object
 	if contentType == "" {
 		contentType = mime.TypeByExtension(filepath.Ext(key))
 	}
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
+	contentType = utils.IfEmptyElse(contentType, "application/octet-stream")
 	return objectstore.Object{
 		Key: key, Size: info.Size(), ContentType: contentType,
 		ModifiedAt: info.ModTime().UTC().Truncate(time.Second),

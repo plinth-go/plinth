@@ -8,6 +8,8 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Component is a long-running part of the service: HTTP, workers, schedulers, pools.
@@ -39,9 +41,7 @@ type Runtime struct {
 const defaultShutdownTimeout = 10 * time.Second
 
 func New(logger *slog.Logger, timeout time.Duration) *Runtime {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	if timeout <= 0 {
 		timeout = defaultShutdownTimeout
 	}

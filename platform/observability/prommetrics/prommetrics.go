@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/platform/observability/internal/response"
+	"github.com/plinth-go/plinth/utils"
 	prom "github.com/prometheus/client_golang/prometheus"
 )
 
@@ -47,14 +48,8 @@ func New(registerer prom.Registerer, cfg Config) (*Metrics, error) {
 	if registerer == nil {
 		return nil, errors.New("prometheus registerer is nil")
 	}
-	namespace := strings.TrimSpace(cfg.Namespace)
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
-	subsystem := strings.TrimSpace(cfg.Subsystem)
-	if subsystem == "" {
-		subsystem = defaultSubsystem
-	}
+	namespace := utils.IfEmptyElse(strings.TrimSpace(cfg.Namespace), defaultNamespace)
+	subsystem := utils.IfEmptyElse(strings.TrimSpace(cfg.Subsystem), defaultSubsystem)
 	if !validMetricName(namespace) {
 		return nil, fmt.Errorf("prometheus namespace %q is invalid", namespace)
 	}

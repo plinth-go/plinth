@@ -14,6 +14,8 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 type requestIDKey struct{}
@@ -60,9 +62,7 @@ func validRequestID(id string) bool {
 // not been committed. Place AccessLog outside Recover so the access log can
 // observe the recovered response and its final byte count.
 func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			state := acquireStatusWriter(w)
@@ -103,9 +103,7 @@ func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
 // Recover inside AccessLog; in the opposite order the inner access log cannot
 // observe the response written by the outer recovery.
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Observer is an optional, backend-neutral hook for job and scheduler
@@ -52,9 +54,7 @@ func (o Observer) dispatched(ctx context.Context, count int, duration time.Durat
 
 func recoverObserver(logger *slog.Logger, operation string) {
 	if recovered := recover(); recovered != nil {
-		if logger == nil {
-			logger = slog.Default()
-		}
+		logger = utils.IfNilElse(logger, slog.Default())
 		logger.Error("observer panicked", "operation", operation, "panic", recovered)
 	}
 }

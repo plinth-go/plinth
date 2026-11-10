@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 const defaultMemoryEntries = 100_000
@@ -130,10 +131,7 @@ func New(cfg Config) (func(http.Handler) http.Handler, error) {
 	if isNilLimiter(cfg.Limiter) {
 		return nil, errors.New("rate limit limiter is nil")
 	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger := utils.IfNilElse(cfg.Logger, slog.Default())
 	keyFunc := cfg.Key
 	if keyFunc == nil {
 		keyFunc = DefaultKey
@@ -195,9 +193,7 @@ func DefaultKey(r *http.Request) (string, error) {
 	if parsed, _, err := net.SplitHostPort(host); err == nil {
 		host = parsed
 	}
-	if host == "" {
-		host = "unknown"
-	}
+	host = utils.IfEmptyElse(host, "unknown")
 	return scope + "|" + host, nil
 }
 

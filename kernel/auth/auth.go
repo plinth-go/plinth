@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 var principalKey = kernel.NewContextKey[Principal]("auth.principal")
@@ -43,17 +44,9 @@ func New(verifier Verifier, cfg Config, logger *slog.Logger) (func(http.Handler)
 	if verifier == nil {
 		return nil, errors.New("auth verifier is nil")
 	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	cfg.Header = strings.TrimSpace(cfg.Header)
-	if cfg.Header == "" {
-		cfg.Header = "Authorization"
-	}
-	cfg.Realm = strings.TrimSpace(cfg.Realm)
-	if cfg.Realm == "" {
-		cfg.Realm = "api"
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
+	cfg.Header = utils.IfEmptyElse(strings.TrimSpace(cfg.Header), "Authorization")
+	cfg.Realm = utils.IfEmptyElse(strings.TrimSpace(cfg.Realm), "api")
 	if strings.ContainsAny(cfg.Realm, "\"\r\n") {
 		return nil, errors.New("auth realm must not contain quotes or control characters")
 	}

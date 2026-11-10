@@ -10,6 +10,8 @@ import (
 	"path"
 	"reflect"
 	"strings"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 //go:embed assets/*
@@ -119,10 +121,7 @@ func Handler(fallback fs.FS, override string) (http.Handler, error) {
 			return
 		}
 
-		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		if name == "" {
-			name = "."
-		}
+		name := utils.IfEmptyElse(strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/"), ".")
 		info, err := fs.Stat(files, name)
 		if err != nil {
 			http.NotFound(w, r)

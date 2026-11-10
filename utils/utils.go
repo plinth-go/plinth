@@ -4,6 +4,38 @@
 // in their respective packages.
 package utils
 
+// IfElse returns whenTrue when condition is true, otherwise whenFalse. All
+// arguments are evaluated before the call, so use it only for values that are
+// safe to compute eagerly.
+func IfElse[T any](condition bool, whenTrue, whenFalse T) T {
+	if condition {
+		return whenTrue
+	}
+	return whenFalse
+}
+
+// IfNilElse returns value when it is non-nil, otherwise fallback. It accepts
+// pointer types, including named pointer types. The fallback argument is
+// evaluated before the call, so use it only for values that are safe to compute
+// eagerly.
+func IfNilElse[T any, P ~*T](value, fallback P) P {
+	if value == nil {
+		return fallback
+	}
+	return value
+}
+
+// IfEmptyElse returns value when it is not its type's zero value, otherwise
+// fallback. The fallback argument is evaluated before the call, so use it only
+// for values that are safe to compute eagerly.
+func IfEmptyElse[T comparable](value, fallback T) T {
+	var zero T
+	if value == zero {
+		return fallback
+	}
+	return value
+}
+
 // NonNilSlice returns values when it is non-nil, otherwise an empty slice. It
 // preserves the original backing array.
 func NonNilSlice[T any](values []T) []T {

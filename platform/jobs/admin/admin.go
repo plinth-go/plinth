@@ -12,6 +12,7 @@ import (
 
 	"github.com/plinth-go/plinth/kernel"
 	"github.com/plinth-go/plinth/platform/jobs"
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -26,9 +27,7 @@ type Store = jobs.AdminStore
 // authenticated prefix; supported routes are GET /jobs/failed,
 // POST /jobs/{id}/retry, and DELETE /jobs/{id}.
 func NewHandler(store Store, logger *slog.Logger) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	handler := &handler{store: store, logger: logger.With("component", "jobs-admin")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /jobs/failed", handler.list)

@@ -15,6 +15,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/alexedwards/scs/v2/memstore"
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 // Store is the persistence contract used by scs.
@@ -59,14 +60,8 @@ func New(store Store, cfg Config) (*Manager, error) {
 	if cfg.IdleTimeout > 0 && cfg.IdleTimeout > cfg.Lifetime {
 		return nil, errors.New("session idle timeout must not exceed lifetime")
 	}
-	name := strings.TrimSpace(cfg.CookieName)
-	if name == "" {
-		name = "plinth_session"
-	}
-	path := strings.TrimSpace(cfg.Path)
-	if path == "" {
-		path = "/"
-	}
+	name := utils.IfEmptyElse(strings.TrimSpace(cfg.CookieName), "plinth_session")
+	path := utils.IfEmptyElse(strings.TrimSpace(cfg.Path), "/")
 	if !strings.HasPrefix(path, "/") {
 		return nil, errors.New("session cookie path must start with /")
 	}
@@ -86,10 +81,7 @@ func New(store Store, cfg Config) (*Manager, error) {
 	if err := cookie.Valid(); err != nil {
 		return nil, fmt.Errorf("session cookie: %w", err)
 	}
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger := utils.IfNilElse(cfg.Logger, slog.Default())
 	manager := scs.New()
 	manager.Lifetime = cfg.Lifetime
 	manager.IdleTimeout = cfg.IdleTimeout

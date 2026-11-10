@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 )
 
 type helloInput struct {
@@ -39,10 +40,7 @@ func hello(_ context.Context, in helloInput) (helloOutput, error) {
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	addr := os.Getenv("ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
-	}
+	addr := utils.IfEmptyElse(os.Getenv("ADDR"), "127.0.0.1:8080")
 
 	server := &http.Server{
 		Addr:              addr,

@@ -1121,10 +1121,8 @@ slogLogger.Info("application starting")
 
 ## 通用工具
 
-只有与业务和基础设施策略无关、所有应用都可能复用的纯函数才进入 `utils`：
-
-- `utils.NonNilSlice` 把 nil slice 转为空 slice，避免 JSON `null` 或数据库数组参数出现意外 nil。
-- `utils.NormalizePage` 统一分页的默认 limit、最大 limit 和负 offset。
+只有与业务和基础设施策略无关、所有应用都可能复用的纯函数才进入 `utils`。
+目前包括纯值选择、零值/nil 回退、slice 非 nil 化和分页边界归一化；具体行为以 GoDoc 为准。
 
 日志构造不重复提供第二套 API，统一使用 `logging.New`。PostgreSQL 错误识别属于平台能力，
 例如 `pgdb.IsUniqueViolation` 判断 `23505` 并支持错误链；应用仍负责把它映射成自己的

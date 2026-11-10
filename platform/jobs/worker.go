@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 	"uuid"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -93,9 +95,7 @@ func NewWorker(store WorkerStore, registry *Registry, logger *slog.Logger, cfg W
 }
 
 func newWorker(store WorkerStore, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	logger = logger.With("component", "worker")
 	cfg = normalizeWorkerConfig(cfg)
 	options := workerOptions{}
