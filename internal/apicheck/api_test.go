@@ -134,8 +134,15 @@ func declarationsForFile(fset *token.FileSet, file *ast.File) []string {
 					if !ast.IsExported(spec.Name.Name) {
 						continue
 					}
-					clearComments(spec)
-					declarations = append(declarations, "type "+formatNode(fset, spec))
+					copy := *spec
+					var omitted bool
+					copy.Type, omitted = exportedType(copy.Type)
+					clearComments(&copy)
+					declaration := "type " + formatNode(fset, &copy)
+					if omitted {
+						declaration = markUnexportedFieldsOmitted(declaration)
+					}
+					declarations = append(declarations, declaration)
 				case *ast.ValueSpec:
 					if !hasExportedName(spec.Names) {
 						continue
@@ -157,6 +164,68 @@ func declarationsForFile(fset *token.FileSet, file *ast.File) []string {
 	return declarations
 }
 
+func exportedType(expr ast.Expr) (ast.Expr, bool) {
+	switch current := expr.(type) {
+	case *ast.StructType:
+		if current == nil || current.Fields == nil {
+			return current, false
+		}
+		fields := &ast.FieldList{Opening: current.Fields.Opening, Closing: current.Fields.Closing}
+		for _, field := range current.Fields.List {
+			if exported := exportedStructField(field); exported != nil {
+				fields.List = append(fields.List, exported)
+			}
+		}
+		copy := *current
+		copy.Fields = fields
+		return &copy, len(fields.List) == 0 && len(current.Fields.List) > 0
+	case *ast.ParenExpr:
+		copy := *current
+		var omitted bool
+		copy.X, omitted = exportedType(current.X)
+		return &copy, omitted
+	default:
+		return expr, false
+	}
+}
+
+func markUnexportedFieldsOmitted(declaration string) string {
+	const marker = "// unexported fields omitted"
+	closing := strings.LastIndex(declaration, "}")
+	if closing < 0 {
+		return declaration
+	}
+	body := strings.TrimRight(declaration[:closing], " \t\r\n")
+	if !strings.HasSuffix(body, "{") {
+		return declaration
+	}
+	return body + "\n\t" + marker + "\n" + declaration[closing:]
+}
+
+func exportedStructField(field *ast.Field) *ast.Field {
+	if field == nil {
+		return nil
+	}
+	copy := *field
+	if len(field.Names) == 0 {
+		if !exportedTypeName(field.Type) {
+			return nil
+		}
+		return &copy
+	}
+	names := make([]*ast.Ident, 0, len(field.Names))
+	for _, name := range field.Names {
+		if ast.IsExported(name.Name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	copy.Names = names
+	return &copy
+}
+
 // exportedReceiver reports whether a method belongs to a type that callers can
 // name outside the package. Exported methods on unexported helper types are
 // implementation details, even though they can satisfy an exported interface.
@@ -164,7 +233,10 @@ func exportedReceiver(receiver *ast.FieldList) bool {
 	if receiver == nil || len(receiver.List) == 0 {
 		return true
 	}
-	typeExpr := receiver.List[0].Type
+	return exportedTypeName(receiver.List[0].Type)
+}
+
+func exportedTypeName(typeExpr ast.Expr) bool {
 	for {
 		switch current := typeExpr.(type) {
 		case *ast.StarExpr:
@@ -173,9 +245,89 @@ func exportedReceiver(receiver *ast.FieldList) bool {
 			typeExpr = current.X
 		case *ast.IndexListExpr:
 			typeExpr = current.X
+		case *ast.SelectorExpr:
+			return ast.IsExported(current.Sel.Name)
 		default:
 			name, ok := typeExpr.(*ast.Ident)
 			return ok && ast.IsExported(name.Name)
+		}
+	}
+}
+
+func TestDeclarationsForFileExportsOnlyPublicStructFields(t *testing.T) {
+	source := `package sample
+
+type Exported struct {
+	Public string
+	private string
+	PublicAndPrivate, hidden int
+	hiddenAgain, PublicAgain int
+	ExportedEmbedded
+	*pkg.ExternalEmbedded
+	*pkg.hiddenEmbedded
+	*hiddenEmbedded
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", source, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declarations := declarationsForFile(fset, file)
+	if len(declarations) != 1 {
+		t.Fatalf("declarations = %#v", declarations)
+	}
+	declaration := declarations[0]
+	for _, want := range []string{"type Exported struct", "Public", "PublicAndPrivate", "PublicAgain", "ExportedEmbedded", "pkg.ExternalEmbedded"} {
+		if !strings.Contains(declaration, want) {
+			t.Fatalf("declaration missing %q: %s", want, declaration)
+		}
+	}
+	for _, unwanted := range []string{"private", "hidden", "hiddenAgain", "hiddenEmbedded"} {
+		if strings.Contains(declaration, unwanted) {
+			t.Fatalf("declaration leaked unexported field %q: %s", unwanted, declaration)
+		}
+	}
+}
+
+func TestDeclarationsForFileMarksUnexportedOnlyStructFields(t *testing.T) {
+	source := `package sample
+
+type PrivateOnly struct {
+	hidden string
+}
+
+type Empty struct{}
+
+type PublicOnly struct {
+	Value string
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", source, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declarations := declarationsForFile(fset, file)
+	if len(declarations) != 3 {
+		t.Fatalf("declarations = %#v", declarations)
+	}
+	byName := make(map[string]string, len(declarations))
+	for _, declaration := range declarations {
+		fields := strings.Fields(declaration)
+		if len(fields) < 2 {
+			t.Fatalf("malformed declaration: %q", declaration)
+		}
+		byName[fields[1]] = declaration
+	}
+
+	const marker = "// unexported fields omitted"
+	if got := byName["PrivateOnly"]; !strings.Contains(got, marker) {
+		t.Fatalf("private-only struct missing omission marker: %s", got)
+	}
+	for _, name := range []string{"Empty", "PublicOnly"} {
+		if got := byName[name]; strings.Contains(got, marker) {
+			t.Fatalf("%s unexpectedly has omission marker: %s", name, got)
 		}
 	}
 }

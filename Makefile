@@ -24,7 +24,7 @@ fmt:
 	$(GOFMT) -w app cmd examples internal kernel platform runtime utils webui
 
 docscheck:
-	cd internal/api && $(GO) run ../../cmd/plinth-docgen -root ../.. -check -out ../generated/docs_gen.go
+	cd internal/api && $(GO) run ../../cmd/plinth-docgen -root ../.. -include-file internal/api/docgen-packages.txt -check -out ../generated/docs_gen.go
 
 golden:
 	UPDATE_GOLDEN=1 $(GO) test ./internal/api -run TestOpenAPISnapshot -count=1

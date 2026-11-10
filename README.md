@@ -256,9 +256,11 @@ repository、job queue、event hub、stream registry、静态 handler 和 assets
 解析、HTTP 协议、TLS、WebSocket、slog 等标准库/三方库自身的正确性由它们的测试负责。
 
 公开包的 API 基线保存在 `internal/apicheck/testdata/public-api.txt`。普通测试会检查
-可导入的导出声明是否漂移；未导出辅助类型上的方法不属于公开 API。只有确认变更是有意的
-兼容性调整时才运行 `make api-update`，并 review 生成的 diff。这个基线不替代语义版本
-或人工兼容性判断。
+可导入的导出声明是否漂移；未导出辅助类型上的方法和导出类型中的未导出字段不属于公开
+API，私有实现布局变化不应更新快照。只有未导出字段的导出类型仍保留类型声明，并用
+`// unexported fields omitted` 标明字段被省略，避免与真正的空结构体混淆。只有确认变更
+是有意的兼容性调整时才运行 `make api-update`，并 review 生成的 diff。这个基线不替代
+语义版本或人工兼容性判断。
 
 `internal/depscheck` 另外用 `go list -deps` 验证依赖边界：核心包不能间接 import
 SCS、gorilla、pgx、go-redis 或 goose，每个可选子包只能带入自己声明的三方依赖。它不是重复
@@ -645,6 +647,10 @@ typed-nil `Headerer` 视为没有附加 headers，避免可选接口把正常响
 - struct 字段 comment -> schema property description。
 - 跳过隐藏目录、`vendor`、`testdata` 和带独立 `go.mod` 的嵌套子模块；`module`
   指令支持行尾注释和带引号的模块路径。
+- `-include-file` 可指定模块相对包目录清单；清单中的目录及其子目录会被扫描，省略该
+  flag 时仍扫描整个模块。本仓库只扫描框架公开包和作为参考应用的 `internal/api`，避免
+  其他内部实现注释造成无关的生成 diff。`internal/api` 不是公共 SDK API；它必须参与
+  扫描，因为参考应用的 handler 和字段注释就是其 OpenAPI 文档的收入来源。
 - 输出到 `internal/generated/docs_gen.go`。
 - 输出先写同目录临时文件再原子替换，生成中断不会留下半截 Go 文件。
 - 命令拒绝未定义的位置参数；`-h` 与未知 flag 使用明确的退出码，不会静默忽略输入。

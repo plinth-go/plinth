@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -90,6 +91,51 @@ func TestRunSkipsNestedModules(t *testing.T) {
 	}
 	if strings.Contains(string(data), "example.com/tools.Nested") || strings.Contains(string(data), "example.com/root/tools.Nested") {
 		t.Fatalf("nested module leaked into generated docs:\n%s", data)
+	}
+}
+
+func TestRunIncludeFileFiltersPackages(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/demo\n\ngo 1.27.3\n")
+	writeTestFile(t, filepath.Join(root, "public", "public.go"), "package public\n\n// Public returns a value.\nfunc Public() {}\n")
+	writeTestFile(t, filepath.Join(root, "public", "sub", "sub.go"), "package sub\n\n// Sub returns a value.\nfunc Sub() {}\n")
+	writeTestFile(t, filepath.Join(root, "internal", "internal.go"), "package internal\n\n// Internal must not appear.\nfunc Internal() {}\n")
+	writeTestFile(t, filepath.Join(root, "docgen-packages.txt"), "# packages used by the reference application\n\npublic\n")
+	out := filepath.Join(t.TempDir(), "docs_gen.go")
+
+	var stdout, stderr bytes.Buffer
+	code := cli([]string{
+		"-root", root,
+		"-out", out,
+		"-include-file", "docgen-packages.txt",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, stderr = %q", code, stderr.String())
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"example.com/demo/public.Public", "example.com/demo/public/sub.Sub"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("included operation %s missing from generated docs:\n%s", want, data)
+		}
+	}
+	if strings.Contains(string(data), "example.com/demo/internal.Internal") {
+		t.Fatalf("excluded package leaked into generated docs:\n%s", data)
+	}
+}
+
+func TestRunIncludeFileRejectsEscapingPath(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/demo\n\ngo 1.27.3\n")
+	writeTestFile(t, filepath.Join(root, "demo.go"), "package demo\n\n// Hello returns a greeting.\nfunc Hello() {}\n")
+	writeTestFile(t, filepath.Join(root, "docgen-packages.txt"), "../outside\n")
+	out := filepath.Join(t.TempDir(), "docs_gen.go")
+
+	err := runWithOutput(root, out, "docgen-packages.txt", false, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "must be module-relative") {
+		t.Fatalf("error = %v", err)
 	}
 }
 

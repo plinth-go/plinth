@@ -1,0 +1,12 @@
+# Package directories scanned for the reference application's OpenAPI comment docs.
+# Each entry also includes descendant directories. internal/api is not a public SDK
+# package; it is included because its route and field comments are the source of the
+# reference application's OpenAPI descriptions.
+app
+kernel
+logging
+platform
+runtime
+utils
+webui
+internal/api
