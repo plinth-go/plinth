@@ -4,7 +4,13 @@ All notable changes to Plinth are recorded here. Release tags use Semantic
 Versioning; the `vNNN` labels in the development notes are internal iteration
 numbers, not module versions.
 
-## [Unreleased]
+## [1.1.0] - 2026-11-10
+
+This release establishes the compatibility baseline for the project's early,
+pre-consumer phase. Plinth had no known external consumers before v1.1.0, so
+the public adapter import paths and the jobs/migration contracts were
+reorganized without keeping the short-lived v1.0.0 spellings. From v1.1.0
+onward, the compatibility rules in [RELEASING.md](RELEASING.md) apply in full.
 
 ### Added
 
@@ -17,11 +23,13 @@ numbers, not module versions.
 - A runnable `examples/hello` quickstart with a real-server HTTP test.
 - A scheduled external-consumer smoke workflow that builds and runs the latest
   published module from a clean temporary module.
-- Contributor issue/PR templates, a code of conduct, and a v1.1 roadmap tied to
+- Contributor issue/PR templates, a code of conduct, and a v1.2 roadmap tied to
   actionable GitHub issues.
 - `actionlint` and `govulncheck` in the required release gate, plus CodeQL
   default setup for Go and GitHub Actions.
 - CI, Go Reference, license, and latest-release badges in the README.
+- `utils.IfElse`, `utils.IfNilElse`, and `utils.IfEmptyElse` for concise value
+  fallbacks without repeated conditional branches.
 
 ### Changed
 
@@ -41,6 +49,17 @@ numbers, not module versions.
   `platform/objectstore/s3store`, `platform/observability/oteltrace`,
   `platform/observability/prommetrics`, and `kernel/wshub`. The previous
   packages are replaced so callers no longer need routine import aliases.
+- Import paths changed as follows: `kernel/websocket` to `kernel/wshub`,
+  `platform/csrf/redis` to `platform/rediscsrf`, `platform/jwt` to
+  `platform/jwtauth`, `platform/objectstore/s3` to
+  `platform/objectstore/s3store`, `platform/observability/otel` to
+  `platform/observability/oteltrace`, `platform/observability/prometheus` to
+  `platform/observability/prommetrics`, `platform/oidc` to
+  `platform/oidcauth`, `platform/postgres` to `platform/pgdb`,
+  `platform/ratelimit/redis` to `platform/redislimit`, `platform/redis` to
+  `platform/redisclient`, and `platform/session/redis` to
+  `platform/redissession`. The PostgreSQL implementation previously embedded
+  in `platform/jobs` is now `platform/pgjobs`.
 - Post-release documentation now installs the published module with `go get`
   instead of requiring a local `replace` directive.
 
