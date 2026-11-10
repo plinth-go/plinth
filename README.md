@@ -268,11 +268,16 @@ SCS、gorilla、pgx、go-redis 或 goose，每个可选子包只能带入自己�
 框架自带两个 fuzz 入口，分别覆盖严格 JSON 绑定和任意路径 dispatch：
 
 ```sh
-make fuzz
+make fuzz                    # 每个目标 5 秒
+make fuzz FUZZTIME=30s       # 自定义本地时长
+make fuzz-extended           # 每个目标 1 分钟，日志写入 fuzz-results/
 ```
 
 它们只断言框架响应不 panic、状态码有效以及成功响应仍是合法 JSON；不把标准库的解析、
 路由匹配和协议协商正确性复制成第二套测试。
+
+仓库还会每周运行 `Extended fuzz` workflow，默认每个目标持续 60 秒，也可手动指定
+时长。失败时 workflow 会保留 job 日志并上传 `kernel/testdata/fuzz` 中的复现输入。
 
 ## 先运行
 

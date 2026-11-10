@@ -102,6 +102,12 @@ tag, module-path, and proxy regressions that source-tree tests cannot detect.
 It tests the latest published release rather than a pull request, so it is not
 part of the required PR checks.
 
+The `Extended fuzz` workflow runs both kernel fuzz targets weekly for one minute
+each by default. Maintainers can dispatch it manually with a different Go
+duration. Failures upload `fuzz-results/` and Go's generated
+`kernel/testdata/fuzz/` corpus so the input can be reproduced locally. The pull
+request release gate keeps the fast five-second fuzz checks.
+
 Use the issue templates for bug reports and feature proposals. Keep pull
 requests focused, include the validation that was run, and call out any public
 API or behavior-contract impact. Directional work is tracked in `ROADMAP.md`.

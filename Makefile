@@ -4,8 +4,10 @@ GO_LICENSES_VERSION ?= v1.6.0
 ACTIONLINT_VERSION ?= v1.7.12
 GOVULNCHECK_VERSION ?= v1.9.0
 ALLOWED_LICENSES ?= Apache-2.0,MIT,BSD-2-Clause,BSD-3-Clause,BSL-1.0,Unlicense
+FUZZTIME ?= 5s
+FUZZTIME_EXTENDED ?= 1m
 
-.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
+.PHONY: all generate fmt docscheck golden check dco-check test vet build bench fuzz fuzz-extended api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
 
 all: generate fmt check test vet build
 
@@ -38,8 +40,11 @@ bench:
 	$(GO) test ./kernel -run '^$$' -bench 'BenchmarkHTTP' -benchmem -count=5
 
 fuzz:
-	$(GO) test ./kernel -run '^$$' -fuzz '^FuzzStrictJSONBinding$$' -fuzztime=5s -count=1
-	$(GO) test ./kernel -run '^$$' -fuzz '^FuzzRouterPath$$' -fuzztime=5s -count=1
+	$(GO) test ./kernel -run '^$$' -fuzz '^FuzzStrictJSONBinding$$' -fuzztime=$(FUZZTIME) -count=1
+	$(GO) test ./kernel -run '^$$' -fuzz '^FuzzRouterPath$$' -fuzztime=$(FUZZTIME) -count=1
+
+fuzz-extended:
+	GO="$(GO)" ./scripts/fuzz-extended.sh "$(FUZZTIME_EXTENDED)"
 
 race:
 	$(GO) test -race ./... -count=1
