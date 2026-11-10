@@ -339,11 +339,12 @@ func TestIntegrationLeaseTokenSeparatesReusedAttempts(t *testing.T) {
 }
 
 func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 	store := newIntegrationStore(t)
 
 	t.Run("failed", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		job, err := store.Enqueue(ctx, "test.failed", nil, jobs.WithMaxAttempts(2))
 		if err != nil {
 			t.Fatal(err)
@@ -376,6 +377,9 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 	})
 
 	t.Run("interrupted", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		job, err := store.Enqueue(ctx, "test.interrupted", nil)
 		if err != nil {
 			t.Fatal(err)
@@ -407,6 +411,9 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 	})
 
 	t.Run("truncated failure replay", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		store := newIntegrationStore(t)
 		job, err := store.Enqueue(ctx, "test.large-failure", nil)
 		if err != nil {
@@ -435,6 +442,9 @@ func TestIntegrationTerminalAcknowledgementsReplayIsIdempotent(t *testing.T) {
 	})
 
 	t.Run("invalid UTF-8 failure", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		store := newIntegrationStore(t)
 		job, err := store.Enqueue(ctx, "test.invalid-utf8-failure", nil)
 		if err != nil {
