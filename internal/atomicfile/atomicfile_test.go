@@ -34,7 +34,7 @@ func TestCreateWritesCompleteFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o640 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o640 {
 		t.Fatalf("mode = %o, want 640", info.Mode().Perm())
 	}
 	assertOnlyFile(t, dir, "output.txt")
@@ -119,10 +119,10 @@ func TestReplaceIsAtomicAndPreservesMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.SameFile(before, after) {
+	if runtime.GOOS != "windows" && os.SameFile(before, after) {
 		t.Fatal("file was rewritten in place instead of atomically replaced")
 	}
-	if after.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 600", after.Mode().Perm())
 	}
 	data, err := os.ReadFile(path)
@@ -205,7 +205,7 @@ func TestStageAppliesFinalModeBeforeCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stagedMode != 0o640 {
+	if runtime.GOOS != "windows" && stagedMode != 0o640 {
 		t.Fatalf("staged mode = %o, want 640", stagedMode)
 	}
 	assertOnlyFile(t, dir, "output.txt")

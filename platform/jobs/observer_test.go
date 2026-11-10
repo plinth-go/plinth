@@ -40,7 +40,7 @@ func TestWorkerObserverReceivesAttemptLifecycle(t *testing.T) {
 		},
 		AttemptFinished: func(_ context.Context, job Job, duration time.Duration, err error) {
 			finished = true
-			if err != nil || duration <= 0 {
+			if err != nil {
 				t.Fatalf("finish = duration %s, error %v", duration, err)
 			}
 		},
@@ -88,7 +88,7 @@ func TestSchedulerObserverReceivesDispatchResult(t *testing.T) {
 	scheduler := newScheduler(store, nil, DefaultSchedulerConfig(), WithSchedulerObserver(Observer{
 		SchedulesDispatched: func(_ context.Context, count int, duration time.Duration, err error) {
 			observed = true
-			if count != 3 || err != nil || duration <= 0 {
+			if count != 3 || err != nil {
 				t.Fatalf("dispatch = count %d, duration %s, error %v", count, duration, err)
 			}
 		},

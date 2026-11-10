@@ -59,6 +59,13 @@ Before a release, run:
 make release-check
 ```
 
+Pull requests run the minimum supported Go toolchain on Ubuntu, macOS, and
+Windows. The platform jobs run `go mod tidy -diff`, `go test ./...`,
+`go vet ./...`, and `go build ./...`; service-backed tests still skip unless
+their `PLINTH_TEST_*` environment variables are configured. The required checks
+are `Go 1.27.0 (minimum)` (Ubuntu), `Go 1.27.0 (macOS)`,
+`Go 1.27.0 (Windows)`, and the Ubuntu `Release gate`.
+
 `make release-check` includes API/documentation freshness checks, third-party
 license compatibility, GitHub Actions workflow linting, the regular test suite,
 `go vet`, both binary builds, the full race suite, both fuzz targets, and
