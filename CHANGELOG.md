@@ -4,6 +4,31 @@ All notable changes to Plinth are recorded here. Release tags use Semantic
 Versioning; the `vNNN` labels in the development notes are internal iteration
 numbers, not module versions.
 
+## [1.2.0] - 2026-11-10
+
+This release adds cross-platform validation, recurring fuzzing and benchmark
+reporting, and a runnable deployment example. It contains no public API or
+behavioral compatibility breaks.
+
+### Added
+
+- macOS and Windows CI jobs at the minimum supported Go version, alongside the
+  existing Linux minimum-version and full release-gate jobs.
+- A weekly extended-fuzz workflow with configurable duration, local Make
+  targets, and failure artifact uploads for logs and generated corpora.
+- A weekly benchmark report with retained artifacts, historical `benchstat`
+  comparisons, and documented noise and investigation thresholds.
+- A runnable `examples/tls-http2` deployment example covering in-process TLS
+  with HTTP/2 and reverse-proxy TLS termination with a loopback plaintext
+  listener.
+
+### Changed
+
+- Repository line endings are normalized to LF, and tests now avoid
+  platform-specific assumptions on Windows and macOS.
+- Contributor, security, roadmap, and example documentation now describe the
+  cross-platform, recurring quality, benchmark, and TLS deployment workflows.
+
 ## [1.1.0] - 2026-11-10
 
 This release establishes the compatibility baseline for the project's early,
