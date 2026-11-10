@@ -108,6 +108,13 @@ duration. Failures upload `fuzz-results/` and Go's generated
 `kernel/testdata/fuzz/` corpus so the input can be reproduced locally. The pull
 request release gate keeps the fast five-second fuzz checks.
 
+The `Benchmark report` workflow runs the representative routing and binding
+benchmarks weekly and compares them with the previous retained artifact using
+`benchstat`. It is diagnostic and deliberately does not block pull requests.
+For a request hot-path change, run `make bench` before and after the change on
+the same machine, then use `make bench-compare`. The full benchmark set, noise
+policy, and investigation threshold are documented in `README.md`.
+
 Use the issue templates for bug reports and feature proposals. Keep pull
 requests focused, include the validation that was run, and call out any public
 API or behavior-contract impact. Directional work is tracked in `ROADMAP.md`.

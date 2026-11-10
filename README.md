@@ -1487,57 +1487,58 @@ plinth-migrate -database-url "$DATABASE_URL" \
 
 ## HTTP 性能基线
 
-框架在 `kernel/benchmark_test.go` 维护一组可重复的进程内基准，覆盖 typed GET、
-并行 typed GET、typed JSON POST、校验失败、raw 响应、404 和常用中间件链。它测量的是
-`Router.ServeHTTP` 的应用侧成本，不包含真实 socket、TLS、keep-alive 或 TLS 握手。
+框架在 `kernel/benchmark_test.go` 维护完整的进程内基准矩阵。用于趋势报告的代表性
+场景固定为：
 
-Go 1.27.3、当前开发机上的 v173 基线（五轮结果取大致范围；更早数字保留在交接记录中用于对比）：
+| 场景 | 基准名 | 覆盖 |
+|---|---|---|
+| 静态路由 | `BenchmarkHTTP/typed-get-static` | 路由命中、typed 响应 |
+| 路径与 query 绑定 | `BenchmarkHTTP/typed-get` | `path`、`query`、JSON 响应 |
+| 路径、query 与 header 绑定 | `BenchmarkHTTP/typed-get-header` | 动态 header 读取 |
+| 严格 JSON body 绑定 | `BenchmarkHTTP/typed-json-post` | 严格解码、校验、响应编码 |
+| 路由未命中 | `BenchmarkHTTP/not-found` | 404 路径 |
 
-| 场景 | 时间 | 内存 | 分配 |
-|---|---:|---:|---:|
-| typed GET | 0.65–0.66 µs/op | 136 B/op | 6 allocs/op |
-| typed GET, no query | 0.53–0.54 µs/op | 144 B/op | 6 allocs/op |
-| typed GET, header binding | 0.70–0.75 µs/op | 160 B/op | 6 allocs/op |
-| typed GET, static route | 0.42–0.43 µs/op | 80 B/op | 3 allocs/op |
-| typed GET parallel | 0.27–0.28 µs/op | 136 B/op | 6 allocs/op |
-| typed JSON POST | 1.67–1.87 µs/op | 706 B/op | 11 allocs/op |
-| validation failure | 3.34–3.62 µs/op | 1776 B/op | 30 allocs/op |
-| JSON encode failure | 3.29–4.19 µs/op | 641 B/op | 12 allocs/op |
-| body limit, declared oversize | 1.19–1.40 µs/op | 945 B/op | 12 allocs/op |
-| body limit, streamed oversize | 1.85–2.04 µs/op | 1552 B/op | 16 allocs/op |
-| raw | 173–209 ns/op | 18 B/op | 2 allocs/op |
-| not found | 0.83–0.86 µs/op | 240 B/op | 14 allocs/op |
-| middleware chain | 3.47–3.59 µs/op | 1170 B/op | 18 allocs/op |
-
-TLS、HTTP/2 和日志配置只发生在构造/启动阶段，不进入请求热路径；v173 复测的分配数与
-v162 一致，时间和基线噪声范围内。
-
-运行：
+这些基准测量 `Router.ServeHTTP` 的应用侧成本，不包含真实 socket、TLS 或 keep-alive。
+`make bench` 先运行 `kernel/budget_test.go` 的分配预算，再以单 CPU、6 个样本执行上述
+场景，并把原始结果写入 `bench-results/bench.txt` 和
+`bench-results/allocation-budgets.txt`：
 
 ```sh
-go test ./kernel -run '^$' \
-  -bench 'BenchmarkHTTP' -benchmem -count=3
+make bench
 ```
 
-`make bench` 会跑 5 轮进程内矩阵。`kernel/budget_test.go` 只用
-`testing.AllocsPerRun` 约束 typed GET、无 query typed GET、静态 typed GET、header
-绑定、typed JSON POST、校验失败、JSON 编码失败、声明/流式 body-limit 拒绝和中间件链的 alloc/op；墙钟时间不进入 CI 断言。预算留有回退余量，
-新增或更新预算必须附带多轮基准结果，不能为了让测试变绿而放宽。
+比较优化前后时，在未改动的同一台机器上保存基准，再对新代码运行并交给 `benchstat`：
 
-基准不是行为契约，也不能单独作为发布门槛；只有连续多轮稳定后才会增加回归阈值。任何
-优化都不得放宽严格 JSON、先编码后提交、typed `Responder` 或动态 header 校验规则。
+```sh
+make bench
+cp bench-results/bench.txt bench-results/baseline.txt
+# 修改代码
+make bench
+make bench-compare BENCH_BASE=bench-results/baseline.txt \
+  BENCH_NEW=bench-results/bench.txt
+```
+
+`Benchmark report` workflow 每周在固定的 `ubuntu-latest` 运行同一组场景，下载上一次
+成功运行的 artifact，用 `benchstat` 生成对比并写入 job summary；原始结果保留 30 天。
+它只报告趋势，不进入必需 PR 检查。GitHub runner 硬件迁移、共享主机负载和编译器版本
+变化都可能造成整体偏移，因此一次报告不构成回归结论。
+
+维护者调查的起点是：同一场景中位数慢至少 10%，`benchstat` 的 `p` 值不大于 0.05，
+且后续一次手动或定时运行确认。分配数变化与时间变化分开判断；分配预算仍是 CI 中唯一
+的硬性性能守卫。只有连续多轮证明稳定后，才会考虑增加墙钟回归阈值。
+
+`kernel/budget_test.go` 使用 `testing.AllocsPerRun` 约束 typed GET、静态路由、header
+绑定、typed JSON POST、校验失败、JSON 编码失败、声明/流式 body-limit 拒绝和中间件链
+的 alloc/op。预算必须保留运行时波动余量；新增或更新预算必须附带多轮非 race 基准结果，
+不能为了让测试变绿而放宽。任何优化都不得放宽严格 JSON、先编码后提交、typed
+`Responder` 或动态 header 校验规则。
+
 POST 基准使用可重置的固定请求体并维持正确的 `ContentLength`，不会把
 `httptest.NewRequest` 的解析成本混入框架成本。
 
 真实 `net/http.Server` 的端到端基准在 `BenchmarkHTTPServer`，使用 keep-alive 连接；
-这些数字包含 client、socket、调度和协议栈成本，不能与上面的进程内数字直接比较：
-
-| 场景 | 时间 | 内存 | 分配 |
-|---|---:|---:|---:|
-| keep-alive GET | 55–57 µs/op | 5708–5720 B/op | 72 allocs/op |
-| keep-alive GET parallel | 14.8–15.9 µs/op | 5682–5699 B/op | 71 allocs/op |
-| keep-alive JSON POST | 62 µs/op | 8004–8069 B/op | 92 allocs/op |
-| TLS GET | 62 µs/op | 5733–5742 B/op | 72 allocs/op |
+它们包含 client、socket、调度和协议栈成本，受 CI 网络与主机噪声影响更大，因此只用于
+手动验证，不进入周期性趋势报告：
 
 ```sh
 go test ./kernel -run '^$' \
