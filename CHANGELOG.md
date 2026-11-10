@@ -8,6 +8,12 @@ numbers, not module versions.
 
 ### Added
 
+- Backend-neutral `platform/jobs` contracts with PostgreSQL storage in
+  `platform/pgjobs` and shared adapter helpers in
+  `platform/jobs/jobutil`.
+- `platform/migrate.Config`/`NewWithConfig` for explicit `database/sql`
+  drivers and Goose dialects, plus a `platform/pgmigrate` convenience
+  adapter.
 - A runnable `examples/hello` quickstart with a real-server HTTP test.
 - A scheduled external-consumer smoke workflow that builds and runs the latest
   published module from a clean temporary module.
@@ -19,6 +25,22 @@ numbers, not module versions.
 
 ### Changed
 
+- `jobs.Worker`, `jobs.Scheduler`, and jobs admin handlers now depend on narrow
+  store interfaces instead of a PostgreSQL-backed concrete store. Claimed jobs
+  expose the lease token through `Job.LeaseToken` so custom stores can implement
+  the same fencing contract.
+- `platform/migrate` no longer imports pgx. Applications select a driver,
+  Goose dialect, and identifier limit directly, or use the PostgreSQL adapter
+  to preserve the previous defaults.
+- Database-specific adapters now use backend-first two-word package names:
+  `platform/pgjobs`, `platform/pgmigrate`, `platform/rediscsrf`,
+  `platform/redislimit`, and `platform/redissession`. Vendor-facing packages
+  that applications commonly import alongside their upstream library now use
+  the same technology-plus-responsibility form: `platform/pgdb`,
+  `platform/redisclient`, `platform/jwtauth`, `platform/oidcauth`,
+  `platform/objectstore/s3store`, `platform/observability/oteltrace`,
+  `platform/observability/prommetrics`, and `kernel/wshub`. The previous
+  packages are replaced so callers no longer need routine import aliases.
 - Post-release documentation now installs the published module with `go get`
   instead of requiring a local `replace` directive.
 

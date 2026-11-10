@@ -41,7 +41,6 @@ func TestSchedulerDeclarationValidatesIntervals(t *testing.T) {
 	}{
 		{name: "below minimum", interval: 500 * time.Millisecond, want: "at least one second"},
 		{name: "fractional second", interval: 1500 * time.Millisecond, want: "whole number of seconds"},
-		{name: "integer overflow", interval: time.Duration(1<<31) * time.Second, want: "Postgres integer-seconds limit"},
 		{name: "one second", interval: time.Second},
 		{name: "whole minutes", interval: 5 * time.Minute},
 	} {
@@ -61,29 +60,6 @@ func TestSchedulerDeclarationValidatesIntervals(t *testing.T) {
 	}
 }
 
-func TestStoreUpsertScheduleValidatesBeforeDatabase(t *testing.T) {
-	store := NewStore(nil)
-	err := store.UpsertSchedule(context.Background(), Schedule{
-		Name:     "test",
-		Kind:     "test.kind",
-		Interval: 1500 * time.Millisecond,
-	})
-	if err == nil || !strings.Contains(err.Error(), "whole number of seconds") {
-		t.Fatalf("error = %v", err)
-	}
-}
-
-func TestStoreReconcileSchedulesPreflightsBeforeDatabase(t *testing.T) {
-	store := NewStore(nil)
-	err := store.ReconcileSchedules(context.Background(), []Schedule{
-		{Name: "valid", Kind: "test.valid", Payload: map[string]string{"ok": "yes"}, Interval: time.Minute},
-		{Name: "invalid", Kind: "test.invalid", Payload: make(chan int), Interval: time.Minute},
-	})
-	if err == nil || !strings.Contains(err.Error(), "marshal schedule payload") {
-		t.Fatalf("error = %v", err)
-	}
-}
-
 func TestSchedulerConfigRejectsNegativeValues(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -98,33 +74,6 @@ func TestSchedulerConfigRejectsNegativeValues(t *testing.T) {
 				NewScheduler(nil, nil, tc.cfg)
 			})
 		})
-	}
-}
-
-func TestStoreRejectsInvalidEnqueueAndDispatchLimits(t *testing.T) {
-	store := NewStore(nil)
-	if _, err := store.Enqueue(context.Background(), "test.kind", nil, WithMaxAttempts(0)); err == nil || !strings.Contains(err.Error(), "at least 1") {
-		t.Fatalf("enqueue error = %v", err)
-	}
-	if _, err := store.Enqueue(context.Background(), "test.kind", nil, nil); err == nil || !strings.Contains(err.Error(), "option at index 0 is nil") {
-		t.Fatalf("nil option error = %v", err)
-	}
-	if _, err := store.Enqueue(context.Background(), "   ", nil); err == nil || !strings.Contains(err.Error(), "kind is empty") {
-		t.Fatalf("blank kind error = %v", err)
-	}
-	if _, err := store.DispatchDueSchedules(context.Background(), 0); err == nil || !strings.Contains(err.Error(), "at least 1") {
-		t.Fatalf("dispatch error = %v", err)
-	}
-}
-
-func TestStoreReconcileSchedulesRejectsDuplicateNamesBeforeDatabase(t *testing.T) {
-	store := NewStore(nil)
-	err := store.ReconcileSchedules(context.Background(), []Schedule{
-		{Name: "duplicate", Kind: "test.first", Interval: time.Minute},
-		{Name: "  duplicate  ", Kind: " test.second ", Interval: time.Minute},
-	})
-	if err == nil || !strings.Contains(err.Error(), "declared more than once") {
-		t.Fatalf("error = %v", err)
 	}
 }
 

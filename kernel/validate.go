@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/plinth-go/plinth/utils"
 )
 
 var (
@@ -182,9 +183,7 @@ func checkInputFields(t reflect.Type) error {
 		for _, candidate := range []string{"path", "query", "header", "body"} {
 			if _, ok := field.Tag.Lookup(candidate); ok {
 				locations = append(locations, candidate)
-				if location == "" {
-					location = candidate
-				}
+				location = utils.IfEmptyElse(location, candidate)
 			}
 		}
 		switch len(locations) {

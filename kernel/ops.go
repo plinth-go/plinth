@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/plinth-go/plinth/utils"
 	"github.com/swaggest/swgui/v5emb"
 )
 
@@ -132,18 +133,10 @@ func (g *Group) RegisterOps(cfg OpsConfig) {
 }
 
 func (r *Router) registerOps(prefix string, mw []Middleware, opts []Option, cfg OpsConfig) {
-	if cfg.LivePath == "" {
-		cfg.LivePath = "/livez"
-	}
-	if cfg.ReadyPath == "" {
-		cfg.ReadyPath = "/readyz"
-	}
-	if cfg.OpenAPIPath == "" {
-		cfg.OpenAPIPath = "/openapi.json"
-	}
-	if cfg.DocsPath == "" {
-		cfg.DocsPath = "/docs/"
-	}
+	cfg.LivePath = utils.IfEmptyElse(cfg.LivePath, "/livez")
+	cfg.ReadyPath = utils.IfEmptyElse(cfg.ReadyPath, "/readyz")
+	cfg.OpenAPIPath = utils.IfEmptyElse(cfg.OpenAPIPath, "/openapi.json")
+	cfg.DocsPath = utils.IfEmptyElse(cfg.DocsPath, "/docs/")
 	if !strings.HasSuffix(cfg.DocsPath, "/") {
 		cfg.DocsPath += "/"
 	}
@@ -314,10 +307,7 @@ func Readyz(cfg ReadyConfig) http.HandlerFunc {
 		cfg.Timeout = 2 * time.Second
 	}
 	checksConfig := normalizeReadyChecks(cfg.Checks)
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger := utils.IfNilElse(cfg.Logger, slog.Default())
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), cfg.Timeout)

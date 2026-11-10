@@ -347,7 +347,7 @@ type Parser struct {
 	contentType string
 }
 
-package github.com/plinth-go/plinth/kernel/websocket
+package github.com/plinth-go/plinth/kernel/wshub
 func (h *Hub) Serve(w http.ResponseWriter, req *http.Request, fn func(context.Context, *gorilla.Conn) error) (err error)
 func NewHub(streams *kernel.StreamRegistry, logger *slog.Logger) *Hub
 func NormalizeError(err error) error
@@ -423,7 +423,7 @@ type Store interface {
 	Delete(context.Context, string) error
 }
 
-package github.com/plinth-go/plinth/platform/csrf/redis
+package github.com/plinth-go/plinth/platform/rediscsrf
 func (s *Store) Delete(ctx context.Context, id string) error
 func (s *Store) Exists(ctx context.Context, id string) (bool, error)
 func (s *Store) Put(ctx context.Context, id string, ttl time.Duration) error
@@ -486,21 +486,6 @@ func (s *Scheduler) Name() string
 func (s *Scheduler) Ready() bool
 func (s *Scheduler) Start(ctx context.Context) error
 func (s *Scheduler) Stop(ctx context.Context) error
-func (s *Store) Claim(ctx context.Context, workerID string) (*Job, error)
-func (s *Store) DeleteFailed(ctx context.Context, id string) error
-func (s *Store) DisableSchedulesExcept(ctx context.Context, names []string) error
-func (s *Store) DispatchDueSchedules(ctx context.Context, limit int) (int, error)
-func (s *Store) Enqueue(ctx context.Context, kind string, payload any, opts ...EnqueueOption) (Job, error)
-func (s *Store) Get(ctx context.Context, id string) (Job, error)
-func (s *Store) ListFailed(ctx context.Context, limit, offset int) ([]Job, error)
-func (s *Store) MarkFailed(ctx context.Context, lease Lease, cause error, retryAt time.Time) error
-func (s *Store) MarkInterrupted(ctx context.Context, lease Lease, cause error) error
-func (s *Store) MarkSucceeded(ctx context.Context, lease Lease) error
-func (s *Store) Ping(ctx context.Context) error
-func (s *Store) ReconcileSchedules(ctx context.Context, schedules []Schedule) error
-func (s *Store) RecoverStale(ctx context.Context, staleAfter time.Duration) error
-func (s *Store) RetryFailed(ctx context.Context, id string) (Job, error)
-func (s *Store) UpsertSchedule(ctx context.Context, schedule Schedule) error
 func (w *Worker) Failed() <-chan struct{}
 func (w *Worker) Failure() error
 func (w *Worker) InFlight() int64
@@ -512,17 +497,26 @@ func DefaultSchedulerConfig() SchedulerConfig
 func DefaultWorkerConfig() WorkerConfig
 func MustRegister[T any](r *Registry, kind string, fn func(context.Context, T) error)
 func NewRegistry() *Registry
-func NewScheduler(store *Store, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler
-func NewStore(pool *pgxpool.Pool) *Store
-func NewWorker(store *Store, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker
+func NewScheduler(store SchedulerStore, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler
+func NewWorker(store WorkerStore, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker
 func Register[T any](r *Registry, kind string, fn func(context.Context, T) error) error
+func ResolveEnqueueOptions(opts ...EnqueueOption) (EnqueueOptions, error)
 func WithDelay(delay time.Duration) EnqueueOption
 func WithMaxAttempts(n int) EnqueueOption
 func WithRegistry(registry *Registry) SchedulerOption
 func WithRunAt(t time.Time) EnqueueOption
 func WithSchedulerObserver(observer Observer) SchedulerOption
 func WithWorkerObserver(observer Observer) WorkerOption
-type EnqueueOption func(*enqueueOptions)
+type AdminStore interface {
+	ListFailed(context.Context, int, int) ([]Job, error)
+	RetryFailed(context.Context, string) (Job, error)
+	DeleteFailed(context.Context, string) error
+}
+type EnqueueOption func(*EnqueueOptions)
+type EnqueueOptions struct {
+	RunAt       time.Time
+	MaxAttempts int
+}
 type Handler func(context.Context, json.RawMessage) error
 type Job struct {
 	ID string `json:"id"`
@@ -545,7 +539,7 @@ type Job struct {
 
 	UpdatedAt time.Time `json:"updated_at"`
 
-	leaseToken string
+	LeaseToken string `json:"-"`
 }
 type Lease struct {
 	JobID    string
@@ -571,7 +565,7 @@ type Schedule struct {
 	Interval time.Duration
 }
 type Scheduler struct {
-	store     schedulerStore
+	store     SchedulerStore
 	logger    *slog.Logger
 	cfg       SchedulerConfig
 	schedules []Schedule
@@ -596,11 +590,29 @@ type SchedulerConfig struct {
 	Batch int `env:"BATCH,default=20" envdoc:"Maximum number of due schedules dispatched per scan." validate:"gte=1"`
 }
 type SchedulerOption func(*schedulerOptions)
-type Store struct {
-	pool *pgxpool.Pool
+type SchedulerStore interface {
+	ReconcileSchedules(context.Context, []Schedule) error
+	DispatchDueSchedules(context.Context, int) (int, error)
+}
+type Store interface {
+	Enqueue(context.Context, string, any, ...EnqueueOption) (Job, error)
+	Get(context.Context, string) (Job, error)
+	ListFailed(context.Context, int, int) ([]Job, error)
+	RetryFailed(context.Context, string) (Job, error)
+	DeleteFailed(context.Context, string) error
+	Claim(context.Context, string) (*Job, error)
+	MarkSucceeded(context.Context, Lease) error
+	MarkFailed(context.Context, Lease, error, time.Time) error
+	MarkInterrupted(context.Context, Lease, error) error
+	RecoverStale(context.Context, time.Duration) error
+	DispatchDueSchedules(context.Context, int) (int, error)
+	UpsertSchedule(context.Context, Schedule) error
+	ReconcileSchedules(context.Context, []Schedule) error
+	DisableSchedulesExcept(context.Context, []string) error
+	Ping(context.Context) error
 }
 type Worker struct {
-	store      workerStore
+	store      WorkerStore
 	registry   *Registry
 	logger     *slog.Logger
 	cfg        WorkerConfig
@@ -637,6 +649,44 @@ type WorkerConfig struct {
 	RetryMax time.Duration `env:"RETRY_MAX,default=1m" envdoc:"Maximum retry delay." validate:"gtefield=RetryBase"`
 }
 type WorkerOption func(*workerOptions)
+type WorkerStore interface {
+	Claim(context.Context, string) (*Job, error)
+	MarkSucceeded(context.Context, Lease) error
+	MarkFailed(context.Context, Lease, error, time.Time) error
+	MarkInterrupted(context.Context, Lease, error) error
+	RecoverStale(context.Context, time.Duration) error
+}
+var ErrInvalidJobID = jobutil.ErrInvalidJobID
+var ErrInvalidLease = jobutil.ErrInvalidLease
+var ErrLeaseLost = jobutil.ErrLeaseLost
+var ErrNotFailed = jobutil.ErrNotFailed
+var ErrNotFound = jobutil.ErrNotFound
+var ErrStoreUnavailable = jobutil.ErrStoreUnavailable
+
+package github.com/plinth-go/plinth/platform/jobs/admin
+func NewHandler(store Store, logger *slog.Logger) http.Handler
+type Store = jobs.AdminStore
+
+package github.com/plinth-go/plinth/platform/jobs/jobutil
+const MaxErrorBytes = 4096
+const MaxIdentifierBytes = 255
+const TruncatedErrorSuffix = "\n[truncated]"
+func ErrorMessage(err error) string
+func MarshalPayload(payload any) ([]byte, error)
+func NormalizeJobID(id string) (string, error)
+func NormalizeJobKind(kind string) (string, error)
+func NormalizeLease(jobID, workerID string, attempt int, token string) (Lease, error)
+func NormalizeSchedule(name, kind string, interval time.Duration) (string, string, error)
+func NormalizeScheduleNames(names []string) ([]string, error)
+func NormalizeWorkerID(workerID string) (string, error)
+func TruncateErrorMessage(message string) string
+func ValidateIdentifier(value, label string) error
+type Lease struct {
+	JobID    string
+	WorkerID string
+	Attempt  int
+	Token    string
+}
 var ErrInvalidJobID = errors.New("job ID is invalid")
 var ErrInvalidLease = errors.New("job lease is invalid")
 var ErrLeaseLost = errors.New("job lease lost")
@@ -644,18 +694,31 @@ var ErrNotFailed = errors.New("job is not in the failed state")
 var ErrNotFound = errors.New("job not found")
 var ErrStoreUnavailable = errors.New("job store is unavailable")
 
-package github.com/plinth-go/plinth/platform/jobs/admin
-func NewHandler(store Store, logger *slog.Logger) http.Handler
-type Store interface {
-	ListFailed(context.Context, int, int) ([]jobs.Job, error)
-	RetryFailed(context.Context, string) (jobs.Job, error)
-	DeleteFailed(context.Context, string) error
-}
-
 package github.com/plinth-go/plinth/platform/jobs/migrations
 func FS() fs.FS
 
-package github.com/plinth-go/plinth/platform/jwt
+package github.com/plinth-go/plinth/platform/pgjobs
+func (s *Store) Claim(ctx context.Context, workerID string) (*jobs.Job, error)
+func (s *Store) DeleteFailed(ctx context.Context, id string) error
+func (s *Store) DisableSchedulesExcept(ctx context.Context, names []string) error
+func (s *Store) DispatchDueSchedules(ctx context.Context, limit int) (int, error)
+func (s *Store) Enqueue(ctx context.Context, kind string, payload any, opts ...jobs.EnqueueOption) (jobs.Job, error)
+func (s *Store) Get(ctx context.Context, id string) (jobs.Job, error)
+func (s *Store) ListFailed(ctx context.Context, limit, offset int) ([]jobs.Job, error)
+func (s *Store) MarkFailed(ctx context.Context, lease jobs.Lease, cause error, retryAt time.Time) error
+func (s *Store) MarkInterrupted(ctx context.Context, lease jobs.Lease, cause error) error
+func (s *Store) MarkSucceeded(ctx context.Context, lease jobs.Lease) error
+func (s *Store) Ping(ctx context.Context) error
+func (s *Store) ReconcileSchedules(ctx context.Context, schedules []jobs.Schedule) error
+func (s *Store) RecoverStale(ctx context.Context, staleAfter time.Duration) error
+func (s *Store) RetryFailed(ctx context.Context, id string) (jobs.Job, error)
+func (s *Store) UpsertSchedule(ctx context.Context, schedule jobs.Schedule) error
+func NewStore(pool *pgxpool.Pool) *Store
+type Store struct {
+	pool *pgxpool.Pool
+}
+
+package github.com/plinth-go/plinth/platform/jwtauth
 func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
 func NewVerifier(cfg Config) (*Verifier, error)
 func ParsePublicKeyPEM(value []byte) (any, error)
@@ -679,7 +742,15 @@ package github.com/plinth-go/plinth/platform/migrate
 func (m *Migrator) Name() string
 func (m *Migrator) Start(ctx context.Context) error
 func (m *Migrator) Stop(context.Context) error
-func New(url string, enabled bool, logger *slog.Logger, sources ...Migration) *Migrator
+func NewWithConfig(cfg Config, sources ...Migration) *Migrator
+type Config struct {
+	URL             string
+	Enabled         bool
+	Logger          *slog.Logger
+	Driver          string
+	Dialect         goose.Dialect
+	IdentifierLimit int
+}
 type Migration struct {
 	Name string
 	FS   fs.FS
@@ -688,12 +759,19 @@ type Migrator struct {
 	url        string
 	enabled    bool
 	logger     *slog.Logger
+	driver     string
+	dialect    goose.Dialect
+	limit      int
 	migrations []Migration
 
 	mu      sync.Mutex
 	started bool
 	closed  bool
 }
+
+package github.com/plinth-go/plinth/platform/pgmigrate
+const IdentifierLimit = 63
+func New(url string, enabled bool, logger *slog.Logger, sources ...migrate.Migration) *migrate.Migrator
 
 package github.com/plinth-go/plinth/platform/objectstore
 func NormalizeKey(key string) (string, error)
@@ -729,7 +807,7 @@ type Store struct {
 	root string
 }
 
-package github.com/plinth-go/plinth/platform/objectstore/s3
+package github.com/plinth-go/plinth/platform/objectstore/s3store
 func (s *Store) Delete(ctx context.Context, key string) error
 func (s *Store) List(ctx context.Context, prefix string, limit int) ([]objectstore.Object, error)
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, objectstore.Object, error)
@@ -754,7 +832,7 @@ type Store struct {
 	prefix string
 }
 
-package github.com/plinth-go/plinth/platform/observability/otel
+package github.com/plinth-go/plinth/platform/observability/oteltrace
 func (t *Tracer) Middleware(next http.Handler) http.Handler
 func New(provider trace.TracerProvider, cfg Config) (*Tracer, error)
 type Config struct {
@@ -770,7 +848,7 @@ type Tracer struct {
 	skip       func(*http.Request) bool
 }
 
-package github.com/plinth-go/plinth/platform/observability/prometheus
+package github.com/plinth-go/plinth/platform/observability/prommetrics
 func (m *Metrics) Middleware(next http.Handler) http.Handler
 func New(registerer prom.Registerer, cfg Config) (*Metrics, error)
 type Config struct {
@@ -789,7 +867,7 @@ type Metrics struct {
 	skip      func(*http.Request) bool
 }
 
-package github.com/plinth-go/plinth/platform/oidc
+package github.com/plinth-go/plinth/platform/oidcauth
 func (v *Verifier) Verify(ctx context.Context, raw string) (auth.Principal, error)
 func NewVerifier(ctx context.Context, cfg Config) (*Verifier, error)
 type Config struct {
@@ -801,7 +879,7 @@ type Verifier struct {
 	verifier *coreoidc.IDTokenVerifier
 }
 
-package github.com/plinth-go/plinth/platform/postgres
+package github.com/plinth-go/plinth/platform/pgdb
 func (p *Postgres) Name() string
 func (p *Postgres) Ping(ctx context.Context) error
 func (p *Postgres) Pool() *pgxpool.Pool
@@ -849,7 +927,7 @@ type Result struct {
 	RetryAfter time.Duration
 }
 
-package github.com/plinth-go/plinth/platform/ratelimit/redis
+package github.com/plinth-go/plinth/platform/redislimit
 const MinimumRedisVersion = "2.6.0"
 const StrategyCommands Strategy = "commands"
 const StrategyScript Strategy = "script"
@@ -871,7 +949,7 @@ type Limiter struct {
 }
 type Strategy string
 
-package github.com/plinth-go/plinth/platform/redis
+package github.com/plinth-go/plinth/platform/redisclient
 func (r *Redis) Client() *goredis.Client
 func (r *Redis) Name() string
 func (r *Redis) Ping(ctx context.Context) error
@@ -938,7 +1016,7 @@ type Manager struct {
 }
 type Store = scs.Store
 
-package github.com/plinth-go/plinth/platform/session/redis
+package github.com/plinth-go/plinth/platform/redissession
 func (s *Store) Commit(token string, value []byte, expiry time.Time) error
 func (s *Store) CommitCtx(ctx context.Context, token string, value []byte, expiry time.Time) error
 func (s *Store) Delete(token string) error
@@ -1024,6 +1102,9 @@ type StreamCloser interface {
 }
 
 package github.com/plinth-go/plinth/utils
+func IfElse[T any](condition bool, whenTrue, whenFalse T) T
+func IfEmptyElse[T comparable](value, fallback T) T
+func IfNilElse[T any, P ~*T](value, fallback P) P
 func NonNilSlice[T any](values []T) []T
 func NormalizePage(limit, offset, defaultLimit, maxLimit int) (int, int)
 

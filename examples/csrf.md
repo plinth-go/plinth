@@ -5,7 +5,7 @@
 ## 接入
 
 ```go
-store := csrf.NewMemoryStore() // 多实例：csrfredis.NewStore(redisClient, "myapp:csrf:")
+store := csrf.NewMemoryStore() // 多实例：rediscsrf.NewStore(redisClient, "myapp:csrf:")
 protect, _ := csrf.New(csrf.Config{
     Store:  store,
     Secure: true,
@@ -47,7 +47,7 @@ X-CSRF-Token: ...
 多实例部署只需替换 store：
 
 ```go
-store, _ := csrfredis.NewStore(redisClient, "myapp:csrf:")
+store, _ := rediscsrf.NewStore(redisClient, "myapp:csrf:")
 ```
 
 `SameSite=None` 必须同时启用 `Secure`。token 只通过响应体交付时，可以设置

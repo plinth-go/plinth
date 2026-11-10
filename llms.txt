@@ -17,7 +17,7 @@
 - [Sessions](examples/session.md): cookie-backed sessions and login/logout.
 - [Security order](examples/security.md): middleware composition only.
 - [Testing](examples/testing.md): testing application business logic with the real router.
-- [Optional platform](examples/optional-platform.md): Postgres, Redis, jobs, object storage.
+- [Optional platform](examples/optional-platform.md): Postgres, Redis, database-neutral jobs/migrations with adapters, object storage.
 
 ## Task lookup
 

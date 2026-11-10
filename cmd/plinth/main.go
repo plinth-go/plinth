@@ -15,8 +15,10 @@ import (
 	"github.com/plinth-go/plinth/platform/jobs"
 	"github.com/plinth-go/plinth/platform/jobs/migrations"
 	"github.com/plinth-go/plinth/platform/migrate"
-	"github.com/plinth-go/plinth/platform/postgres"
-	"github.com/plinth-go/plinth/platform/redis"
+	"github.com/plinth-go/plinth/platform/pgdb"
+	"github.com/plinth-go/plinth/platform/pgjobs"
+	"github.com/plinth-go/plinth/platform/pgmigrate"
+	"github.com/plinth-go/plinth/platform/redisclient"
 	"github.com/plinth-go/plinth/runtime"
 	"github.com/plinth-go/plinth/webui"
 )
@@ -53,11 +55,11 @@ func run(ctx context.Context) (err error) {
 			err = errors.Join(err, fmt.Errorf("close logger: %w", closeErr))
 		}
 	}()
-	postgres, err := postgres.New(ctx, cfg.DatabaseURL)
+	postgres, err := pgdb.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}
-	redis, err := redis.New(cfg.RedisURL)
+	redis, err := redisclient.New(cfg.RedisURL)
 	if err != nil {
 		return err
 	}
@@ -66,7 +68,7 @@ func run(ctx context.Context) (err error) {
 		return err
 	}
 
-	store := jobs.NewStore(postgres.Pool())
+	store := pgjobs.NewStore(postgres.Pool())
 	registry := jobs.NewRegistry()
 	slogLogger := logger.Slog()
 	registerSystemJobs(registry, slogLogger)
@@ -98,7 +100,7 @@ func run(ctx context.Context) (err error) {
 	rt.Add(
 		postgres,
 		redis,
-		migrate.New(cfg.DatabaseURL, cfg.AutoMigrate, slogLogger,
+		pgmigrate.New(cfg.DatabaseURL, cfg.AutoMigrate, slogLogger,
 			migrate.Migration{Name: "plinth", FS: migrations.FS()},
 		),
 		worker,

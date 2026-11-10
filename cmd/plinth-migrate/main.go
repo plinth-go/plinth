@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/plinth-go/plinth/platform/migrate"
+	"github.com/plinth-go/plinth/platform/pgmigrate"
 )
 
 func main() {
@@ -73,7 +74,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
-	migrator := migrate.New(strings.TrimSpace(*databaseURL), true, logger, migrations...)
+	migrator := pgmigrate.New(strings.TrimSpace(*databaseURL), true, logger, migrations...)
 	if err := migrator.Start(ctx); err != nil {
 		return err
 	}

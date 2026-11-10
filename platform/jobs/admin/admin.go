@@ -4,7 +4,6 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/plinth-go/plinth/kernel"
 	"github.com/plinth-go/plinth/platform/jobs"
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -21,19 +21,13 @@ const (
 )
 
 // Store is the failed-job subset used by the admin handler.
-type Store interface {
-	ListFailed(context.Context, int, int) ([]jobs.Job, error)
-	RetryFailed(context.Context, string) (jobs.Job, error)
-	DeleteFailed(context.Context, string) error
-}
+type Store = jobs.AdminStore
 
 // NewHandler returns a JSON handler for failed jobs. Mount it beneath an
 // authenticated prefix; supported routes are GET /jobs/failed,
 // POST /jobs/{id}/retry, and DELETE /jobs/{id}.
 func NewHandler(store Store, logger *slog.Logger) http.Handler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	handler := &handler{store: store, logger: logger.With("component", "jobs-admin")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /jobs/failed", handler.list)

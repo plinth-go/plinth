@@ -20,9 +20,22 @@ type typedNilFS struct{}
 
 func (*typedNilFS) Open(string) (fs.File, error) { panic("typed nil filesystem was used") }
 
+const testIdentifierLimit = 63
+
+func newTestMigrator(url string, enabled bool, logger *slog.Logger, sources ...Migration) *Migrator {
+	return NewWithConfig(Config{
+		URL:             url,
+		Enabled:         enabled,
+		Logger:          logger,
+		Driver:          "pgx",
+		Dialect:         goose.DialectPostgres,
+		IdentifierLimit: testIdentifierLimit,
+	}, sources...)
+}
+
 func TestPreflightsAllSourcesBeforeOpeningDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New("://invalid", true, logger,
+	migrator := newTestMigrator("://invalid", true, logger,
 		Migration{Name: "one", FS: fstest.MapFS{}},
 		Migration{Name: "two"},
 	)
@@ -34,7 +47,7 @@ func TestPreflightsAllSourcesBeforeOpeningDatabase(t *testing.T) {
 
 func TestRejectsEmptyURLWhenEnabled(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New(" \t ", true, logger,
+	migrator := newTestMigrator(" \t ", true, logger,
 		Migration{Name: "app", FS: fstest.MapFS{}},
 	)
 	err := migrator.Start(context.Background())
@@ -43,9 +56,46 @@ func TestRejectsEmptyURLWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestRejectsIncompleteBackendConfig(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	source := Migration{Name: "app", FS: fstest.MapFS{}}
+	tests := []struct {
+		name string
+		cfg  Config
+		want string
+	}{
+		{
+			name: "driver",
+			cfg: Config{URL: "://invalid", Enabled: true, Logger: logger,
+				Dialect: goose.DialectPostgres},
+			want: "driver must not be empty",
+		},
+		{
+			name: "dialect",
+			cfg: Config{URL: "://invalid", Enabled: true, Logger: logger,
+				Driver: "pgx"},
+			want: "dialect must not be empty",
+		},
+		{
+			name: "negative identifier limit",
+			cfg: Config{URL: "://invalid", Enabled: true, Logger: logger,
+				Driver: "pgx", Dialect: goose.DialectPostgres, IdentifierLimit: -1},
+			want: "identifier limit must not be negative",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := NewWithConfig(tt.cfg, source).Start(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestHonorsCanceledContextBeforeOpeningDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New("postgres://user:pass@127.0.0.1:1/db?sslmode=disable", true, logger,
+	migrator := newTestMigrator("postgres://user:pass@127.0.0.1:1/db?sslmode=disable", true, logger,
 		Migration{Name: "app", FS: fstest.MapFS{}},
 	)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -86,7 +136,7 @@ func TestMigrationApplyErrorReportsPartialProgress(t *testing.T) {
 func TestRejectsTypedNilFilesystemBeforeOpeningDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	var files *typedNilFS
-	migrator := New("://invalid", true, logger,
+	migrator := newTestMigrator("://invalid", true, logger,
 		Migration{Name: "app", FS: files},
 	)
 	err := migrator.Start(context.Background())
@@ -97,7 +147,7 @@ func TestRejectsTypedNilFilesystemBeforeOpeningDatabase(t *testing.T) {
 
 func TestRejectsCollidingSourceTablesBeforeOpeningDatabase(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New("://invalid", true, logger,
+	migrator := newTestMigrator("://invalid", true, logger,
 		Migration{Name: "app", FS: fstest.MapFS{}},
 		Migration{Name: "App!", FS: fstest.MapFS{}},
 	)
@@ -107,14 +157,14 @@ func TestRejectsCollidingSourceTablesBeforeOpeningDatabase(t *testing.T) {
 	}
 }
 
-func TestRejectsSourceTableOverPostgresIdentifierLimit(t *testing.T) {
+func TestRejectsSourceTableOverConfiguredIdentifierLimit(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	name := "app_" + strings.Repeat("x", maxPostgresIdentifierBytes)
-	migrator := New("://invalid", true, logger,
+	name := "app_" + strings.Repeat("x", testIdentifierLimit)
+	migrator := newTestMigrator("://invalid", true, logger,
 		Migration{Name: name, FS: fstest.MapFS{}},
 	)
 	err := migrator.Start(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "PostgreSQL identifiers are limited to 63 bytes") {
+	if err == nil || !strings.Contains(err.Error(), "database identifiers are limited to 63 bytes") {
 		t.Fatalf("error = %v", err)
 	}
 }
@@ -132,7 +182,7 @@ func TestRejectsInvalidSourceNamesBeforeOpeningDatabase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			migrator := New("://invalid", true, logger,
+			migrator := newTestMigrator("://invalid", true, logger,
 				Migration{Name: tt.source, FS: fstest.MapFS{}},
 			)
 			err := migrator.Start(context.Background())
@@ -143,18 +193,18 @@ func TestRejectsInvalidSourceNamesBeforeOpeningDatabase(t *testing.T) {
 	}
 }
 
-func TestMigrationTableNameAtPostgresIdentifierLimitIsAccepted(t *testing.T) {
+func TestMigrationTableNameAtConfiguredIdentifierLimitIsAccepted(t *testing.T) {
 	const prefix = "goose_version_"
-	name := strings.Repeat("x", maxPostgresIdentifierBytes-len(prefix))
+	name := strings.Repeat("x", testIdentifierLimit-len(prefix))
 	table := migrationTableName(name)
-	if len(table) != maxPostgresIdentifierBytes {
-		t.Fatalf("table %q has %d bytes, want %d", table, len(table), maxPostgresIdentifierBytes)
+	if len(table) != testIdentifierLimit {
+		t.Fatalf("table %q has %d bytes, want %d", table, len(table), testIdentifierLimit)
 	}
 }
 
 func TestLifecycleIsSingleUse(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New("", false, logger)
+	migrator := newTestMigrator("", false, logger)
 	if err := migrator.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +253,7 @@ func TestNilReceiverIsSafe(t *testing.T) {
 
 func TestStopBeforeStartPreventsStart(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New("", false, logger)
+	migrator := newTestMigrator("", false, logger)
 	if err := migrator.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +279,7 @@ DROP TABLE plinth_platform_test;
 `)},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New(schemaURL, true, logger, Migration{Name: "platform_test", FS: source})
+	migrator := newTestMigrator(schemaURL, true, logger, Migration{Name: "platform_test", FS: source})
 	if err := migrator.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +328,7 @@ DROP TABLE plinth_platform_first;
 		"00001_two.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nSELECT 2;\n")},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New(schemaURL, true, logger,
+	migrator := newTestMigrator(schemaURL, true, logger,
 		Migration{Name: "first", FS: first},
 		Migration{Name: "invalid", FS: invalid},
 	)
@@ -324,7 +374,7 @@ DROP TABLE plinth_platform_second;
 `)},
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	migrator := New(schemaURL, true, logger, Migration{Name: "partial", FS: source})
+	migrator := newTestMigrator(schemaURL, true, logger, Migration{Name: "partial", FS: source})
 	err := migrator.Start(ctx)
 	if err == nil {
 		t.Fatal("partial migration succeeded")

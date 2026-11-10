@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/plinth-go/plinth/internal/jsonx"
+	"github.com/plinth-go/plinth/utils"
 )
 
 type Handler[In, Out any] func(context.Context, In) (Out, error)
@@ -173,9 +174,7 @@ type Router struct {
 }
 
 func NewRouter(logger *slog.Logger, title, version string) *Router {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	v := validator.New(validator.WithRequiredStructEnabled())
 	v.RegisterTagNameFunc(func(field reflect.StructField) string {
 		for _, tagName := range []string{"json", "query", "header", "path"} {

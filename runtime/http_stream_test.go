@@ -13,7 +13,7 @@ import (
 
 	gorilla "github.com/gorilla/websocket"
 	"github.com/plinth-go/plinth/kernel"
-	"github.com/plinth-go/plinth/kernel/websocket"
+	"github.com/plinth-go/plinth/kernel/wshub"
 )
 
 func startHTTPTestServer(t *testing.T, handler http.Handler, streams StreamCloser, options ...HTTPOption) *HTTP {
@@ -88,7 +88,7 @@ func TestHTTPStopCancelsRealSSEStream(t *testing.T) {
 
 func TestHTTPStopClosesRealWebSocketStream(t *testing.T) {
 	streams := kernel.NewStreamRegistry()
-	hub := websocket.NewHub(streams, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	hub := wshub.NewHub(streams, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	started := make(chan struct{})
 	handlerDone := make(chan error, 1)
 	mux := http.NewServeMux()

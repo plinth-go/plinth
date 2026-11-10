@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 type StreamCloser interface {
@@ -122,9 +124,7 @@ type HTTP struct {
 }
 
 func NewHTTP(addr string, handler http.Handler, streams StreamCloser, logger *slog.Logger, options ...HTTPOption) *HTTP {
-	if logger == nil {
-		logger = slog.Default()
-	}
+	logger = utils.IfNilElse(logger, slog.Default())
 	logger = logger.With("component", "http")
 	if isNilInterface(streams) {
 		streams = nil

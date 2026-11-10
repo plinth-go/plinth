@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 	"uuid"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 const (
@@ -48,16 +50,8 @@ func DefaultWorkerConfig() WorkerConfig {
 	}
 }
 
-type workerStore interface {
-	Claim(context.Context, string) (*Job, error)
-	MarkSucceeded(context.Context, Lease) error
-	MarkFailed(context.Context, Lease, error, time.Time) error
-	MarkInterrupted(context.Context, Lease, error) error
-	RecoverStale(context.Context, time.Duration) error
-}
-
 type Worker struct {
-	store      workerStore
+	store      WorkerStore
 	registry   *Registry
 	logger     *slog.Logger
 	cfg        WorkerConfig
@@ -96,18 +90,12 @@ func WithWorkerObserver(observer Observer) WorkerOption {
 	}
 }
 
-func NewWorker(store *Store, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker {
-	var backend workerStore
-	if store != nil && store.pool != nil {
-		backend = store
-	}
-	return newWorker(backend, registry, logger, cfg, opts...)
+func NewWorker(store WorkerStore, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker {
+	return newWorker(store, registry, logger, cfg, opts...)
 }
 
-func newWorker(store workerStore, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func newWorker(store WorkerStore, registry *Registry, logger *slog.Logger, cfg WorkerConfig, opts ...WorkerOption) *Worker {
+	logger = utils.IfNilElse(logger, slog.Default())
 	logger = logger.With("component", "worker")
 	cfg = normalizeWorkerConfig(cfg)
 	options := workerOptions{}
@@ -131,7 +119,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	}
 	w.lifecycleMu.Lock()
 	defer w.lifecycleMu.Unlock()
-	if w.store == nil || w.registry == nil {
+	if isNilInterface(w.store) || w.registry == nil {
 		return fmt.Errorf("job worker requires store and registry")
 	}
 	if err := w.failureCause(); err != nil {

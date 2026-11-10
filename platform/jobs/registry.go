@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/plinth-go/plinth/internal/jsonx"
+	"github.com/plinth-go/plinth/platform/jobs/jobutil"
 )
 
 type Handler func(context.Context, json.RawMessage) error
@@ -132,12 +133,5 @@ func (r *Registry) Kinds() []string {
 }
 
 func normalizeJobKind(kind string) (string, error) {
-	kind = strings.TrimSpace(kind)
-	if kind == "" {
-		return "", fmt.Errorf("job kind is empty")
-	}
-	if err := validateIdentifier(kind, "job kind"); err != nil {
-		return "", err
-	}
-	return kind, nil
+	return jobutil.NormalizeJobKind(kind)
 }

@@ -14,10 +14,10 @@ import (
 	gorilla "github.com/gorilla/websocket"
 	"github.com/plinth-go/plinth/internal/generated"
 	"github.com/plinth-go/plinth/kernel"
-	"github.com/plinth-go/plinth/kernel/websocket"
+	"github.com/plinth-go/plinth/kernel/wshub"
 	"github.com/plinth-go/plinth/platform/jobs"
-	"github.com/plinth-go/plinth/platform/postgres"
-	"github.com/plinth-go/plinth/platform/redis"
+	"github.com/plinth-go/plinth/platform/pgdb"
+	"github.com/plinth-go/plinth/platform/redisclient"
 )
 
 const (
@@ -27,9 +27,9 @@ const (
 
 type Dependencies struct {
 	Logger    *slog.Logger
-	Postgres  *postgres.Postgres
-	Redis     *redis.Redis
-	Jobs      *jobs.Store
+	Postgres  *pgdb.Postgres
+	Redis     *redisclient.Redis
+	Jobs      jobs.Store
 	Registry  *jobs.Registry
 	Worker    *jobs.Worker
 	Scheduler *jobs.Scheduler
@@ -41,7 +41,7 @@ type Dependencies struct {
 type API struct {
 	deps       Dependencies
 	router     *kernel.Router
-	websockets *websocket.Hub
+	websockets *wshub.Hub
 }
 
 func New(deps Dependencies) (*kernel.Router, error) {
@@ -70,7 +70,7 @@ func New(deps Dependencies) (*kernel.Router, error) {
 	a := &API{
 		deps:       deps,
 		router:     router,
-		websockets: websocket.NewHub(deps.Streams, deps.Logger),
+		websockets: wshub.NewHub(deps.Streams, deps.Logger),
 	}
 	a.routes()
 	return router, nil
@@ -177,7 +177,7 @@ func (a *API) websocket(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	})
-	err = websocket.NormalizeError(err)
+	err = wshub.NormalizeError(err)
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, kernel.ErrStreamsClosed) {
 		a.deps.Logger.Debug("websocket closed", "error", err)
 	}

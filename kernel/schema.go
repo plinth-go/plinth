@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 var (
@@ -778,9 +780,7 @@ func jsonField(field reflect.StructField) (name string, optional bool) {
 		return "-", false
 	}
 	name, options, _ := strings.Cut(tag, ",")
-	if name == "" {
-		name = field.Name
-	}
+	name = utils.IfEmptyElse(name, field.Name)
 	omitEmpty := false
 	omitZero := false
 	for _, option := range strings.Split(options, ",") {

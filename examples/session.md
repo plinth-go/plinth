@@ -3,7 +3,7 @@
 适用：服务端保存登录状态，浏览器通过 cookie 持有 session token。
 
 ```go
-store := session.NewMemoryStore() // 多实例：sessionredis.NewStore(redisClient, "myapp:session:")
+store := session.NewMemoryStore() // 多实例：redissession.NewStore(redisClient, "myapp:session:")
 sessions, _ := session.New(store, session.Config{
     Lifetime:    24 * time.Hour,
     IdleTimeout: 30 * time.Minute,
@@ -29,6 +29,6 @@ func currentUser(ctx context.Context, _ CurrentUserInput) (CurrentUserOutput, er
 - 登出调用 `sessions.Destroy(ctx)`。
 - Cookie 始终 `HttpOnly`；HTTPS 部署必须 `Secure`。
 - 默认 `SameSite=Lax`；`None` 需要 `Secure`，`Partitioned` 也需要 `Secure`。
-- 内存 store 只适合单实例；多实例使用 `platform/session/redis`。
+- 内存 store 只适合单实例；多实例使用 `platform/redissession`。
 - 只把 `sessions.Middleware` 挂到需要 session 的路由组。
 - Cookie 认证的状态变更接口仍需 CSRF 防护。

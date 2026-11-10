@@ -1,10 +1,8 @@
 package jobs
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -104,66 +102,6 @@ func TestErrorMessageIsBoundedAndUTF8Safe(t *testing.T) {
 	}
 }
 
-func TestStoreEnqueuePreflightsPayloadBeforeDatabase(t *testing.T) {
-	type nullablePayload struct {
-		Value *string `json:"value"`
-	}
-	store := NewStore(nil)
-	_, err := store.Enqueue(context.Background(), "test.kind", nullablePayload{})
-	if !errors.Is(err, jsonx.ErrNull) {
-		t.Fatalf("error = %v, want jsonx.ErrNull", err)
-	}
-	if errors.Is(err, ErrStoreUnavailable) {
-		t.Fatal("invalid payload was hidden by store unavailability")
-	}
-}
-
-func TestStoreEnqueueRejectsMaxAttemptsOutsidePostgresIntegerRange(t *testing.T) {
-	store := NewStore(nil)
-	_, err := store.Enqueue(context.Background(), "test.kind", nil, WithMaxAttempts(math.MaxInt32+1))
-	if err == nil || !strings.Contains(err.Error(), "must not exceed") {
-		t.Fatalf("error = %v", err)
-	}
-	if errors.Is(err, ErrStoreUnavailable) {
-		t.Fatal("invalid max attempts was hidden by store unavailability")
-	}
-}
-
-func TestStoreRejectsInvalidIdentifiersBeforeDatabase(t *testing.T) {
-	ctx := context.Background()
-	store := NewStore(nil)
-	if _, err := store.Get(ctx, "not-a-uuid"); !errors.Is(err, ErrInvalidJobID) {
-		t.Fatalf("Get error = %v, want ErrInvalidJobID", err)
-	}
-	if _, err := store.Claim(ctx, "   "); err == nil || !strings.Contains(err.Error(), "worker ID is required") {
-		t.Fatalf("Claim error = %v", err)
-	}
-
-	invalidLeases := []Lease{
-		{JobID: "not-a-uuid", WorkerID: "worker-1", Attempt: 1},
-		{JobID: testJobID, WorkerID: "   ", Attempt: 1},
-		{JobID: testJobID, WorkerID: "worker-1", Attempt: 0},
-		{JobID: testJobID, WorkerID: "worker-1", Attempt: 1},
-		{JobID: testJobID, WorkerID: "worker-1", Attempt: 1, Token: "not-a-uuid"},
-	}
-	for _, lease := range invalidLeases {
-		if err := store.MarkSucceeded(ctx, lease); !errors.Is(err, ErrInvalidLease) {
-			t.Fatalf("MarkSucceeded(%#v) error = %v, want ErrInvalidLease", lease, err)
-		}
-		if err := store.MarkFailed(ctx, lease, errors.New("boom"), time.Now()); !errors.Is(err, ErrInvalidLease) {
-			t.Fatalf("MarkFailed(%#v) error = %v, want ErrInvalidLease", lease, err)
-		}
-		if err := store.MarkInterrupted(ctx, lease, context.Canceled); !errors.Is(err, ErrInvalidLease) {
-			t.Fatalf("MarkInterrupted(%#v) error = %v, want ErrInvalidLease", lease, err)
-		}
-	}
-
-	validLease := Lease{JobID: testJobID, WorkerID: "worker-1", Attempt: 1, Token: testLeaseToken}
-	if err := store.MarkFailed(ctx, validLease, errors.New("boom"), time.Time{}); err == nil || !strings.Contains(err.Error(), "retry time") {
-		t.Fatalf("zero retry time error = %v", err)
-	}
-}
-
 func TestStoreCanonicalizesIdentifiers(t *testing.T) {
 	id, err := normalizeJobID("  {F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6}  ")
 	if err != nil {
@@ -188,6 +126,22 @@ func TestStoreCanonicalizesIdentifiers(t *testing.T) {
 	}
 	if lease.JobID != id || lease.WorkerID != workerID || lease.Attempt != 2 || lease.Token != testLeaseToken {
 		t.Fatalf("lease = %#v", lease)
+	}
+}
+
+func TestResolveEnqueueOptionsValidatesWithoutABackend(t *testing.T) {
+	options, err := ResolveEnqueueOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.MaxAttempts != 3 {
+		t.Fatalf("default max attempts = %d", options.MaxAttempts)
+	}
+	if _, err := ResolveEnqueueOptions(WithMaxAttempts(0)); err == nil || !strings.Contains(err.Error(), "at least 1") {
+		t.Fatalf("zero attempts error = %v", err)
+	}
+	if _, err := ResolveEnqueueOptions(nil); err == nil || !strings.Contains(err.Error(), "option at index 0 is nil") {
+		t.Fatalf("nil option error = %v", err)
 	}
 }
 
@@ -263,131 +217,5 @@ func TestIdentifiersRejectInvalidUTF8ControlAndOversize(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, tt.want)
 			}
 		})
-	}
-}
-
-func TestStorePreflightsScheduleNamesBeforeDatabase(t *testing.T) {
-	store := NewStore(nil)
-	err := store.DisableSchedulesExcept(context.Background(), []string{" "})
-	if err == nil || !strings.Contains(err.Error(), "empty") {
-		t.Fatalf("error = %v", err)
-	}
-	if errors.Is(err, ErrStoreUnavailable) {
-		t.Fatal("invalid schedule names were hidden by store unavailability")
-	}
-}
-
-func TestStoreRecoverStaleRejectsNonPositiveAge(t *testing.T) {
-	store := &Store{}
-	for _, staleAfter := range []time.Duration{0, -time.Second} {
-		if err := store.RecoverStale(context.Background(), staleAfter); err == nil {
-			t.Fatalf("stale duration %s was accepted", staleAfter)
-		}
-	}
-}
-
-func TestStoreRejectsUnavailablePool(t *testing.T) {
-	ctx := context.Background()
-	lease := Lease{JobID: testJobID, WorkerID: "worker-1", Attempt: 1, Token: testLeaseToken}
-	checks := []struct {
-		name string
-		call func(*Store) error
-	}{
-		{name: "enqueue", call: func(store *Store) error {
-			_, err := store.Enqueue(ctx, "test.kind", struct{}{})
-			return err
-		}},
-		{name: "get", call: func(store *Store) error {
-			_, err := store.Get(ctx, testJobID)
-			return err
-		}},
-		{name: "list failed", call: func(store *Store) error {
-			_, err := store.ListFailed(ctx, 10, 0)
-			return err
-		}},
-		{name: "retry failed", call: func(store *Store) error {
-			_, err := store.RetryFailed(ctx, testJobID)
-			return err
-		}},
-		{name: "delete failed", call: func(store *Store) error {
-			return store.DeleteFailed(ctx, testJobID)
-		}},
-		{name: "claim", call: func(store *Store) error {
-			_, err := store.Claim(ctx, "worker-1")
-			return err
-		}},
-		{name: "mark succeeded", call: func(store *Store) error {
-			return store.MarkSucceeded(ctx, lease)
-		}},
-		{name: "mark failed", call: func(store *Store) error {
-			return store.MarkFailed(ctx, lease, errors.New("boom"), time.Now())
-		}},
-		{name: "mark interrupted", call: func(store *Store) error {
-			return store.MarkInterrupted(ctx, lease, context.Canceled)
-		}},
-		{name: "recover stale", call: func(store *Store) error {
-			return store.RecoverStale(ctx, time.Minute)
-		}},
-		{name: "dispatch due schedules", call: func(store *Store) error {
-			_, err := store.DispatchDueSchedules(ctx, 1)
-			return err
-		}},
-		{name: "upsert schedule", call: func(store *Store) error {
-			return store.UpsertSchedule(ctx, Schedule{
-				Name: "test", Kind: "test.kind", Interval: time.Minute,
-			})
-		}},
-		{name: "reconcile schedules", call: func(store *Store) error {
-			return store.ReconcileSchedules(ctx, nil)
-		}},
-		{name: "disable schedules", call: func(store *Store) error {
-			return store.DisableSchedulesExcept(ctx, nil)
-		}},
-		{name: "ping", call: func(store *Store) error {
-			return store.Ping(ctx)
-		}},
-	}
-
-	for _, tc := range checks {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, store := range []*Store{nil, {}} {
-				if err := tc.call(store); !errors.Is(err, ErrStoreUnavailable) {
-					t.Fatalf("error = %v, want ErrStoreUnavailable", err)
-				}
-			}
-		})
-	}
-}
-
-func TestListFailedRejectsUnboundedPagination(t *testing.T) {
-	store := NewStore(nil)
-	for _, test := range []struct {
-		limit  int
-		offset int
-		want   string
-	}{
-		{limit: 0, want: "limit"},
-		{limit: 101, want: "limit"},
-		{limit: 10, offset: -1, want: "offset"},
-	} {
-		_, err := store.ListFailed(context.Background(), test.limit, test.offset)
-		if err == nil || !strings.Contains(err.Error(), test.want) {
-			t.Fatalf("ListFailed(%d, %d) error = %v", test.limit, test.offset, err)
-		}
-		if errors.Is(err, ErrStoreUnavailable) {
-			t.Fatalf("ListFailed(%d, %d) reached store availability check", test.limit, test.offset)
-		}
-	}
-}
-
-func TestStoreTerminalCausesAcceptTypedNilErrors(t *testing.T) {
-	var cause *typedNilJobError
-	lease := Lease{JobID: testJobID, WorkerID: "worker-1", Attempt: 1, Token: testLeaseToken}
-	store := &Store{}
-	if err := store.MarkFailed(context.Background(), lease, cause, time.Now()); !errors.Is(err, ErrStoreUnavailable) {
-		t.Fatalf("MarkFailed error = %v", err)
-	}
-	if err := store.MarkInterrupted(context.Background(), lease, cause); !errors.Is(err, ErrStoreUnavailable) {
-		t.Fatalf("MarkInterrupted error = %v", err)
 	}
 }

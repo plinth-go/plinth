@@ -1,27 +1,14 @@
-// Package jobs provides the optional PostgreSQL-backed durable job queue,
-// worker, and scheduler. Applications that do not import this package do not
-// compile pgx-backed job support from Plinth.
+// Package jobs provides backend-neutral durable job and schedule contracts,
+// workers, and schedulers. Database adapters such as platform/pgjobs
+// provide the actual store implementation.
 package jobs
 
 import (
-	"fmt"
-	"unicode"
-	"unicode/utf8"
+	"github.com/plinth-go/plinth/platform/jobs/jobutil"
 )
 
-const maxIdentifierBytes = 255
+const maxIdentifierBytes = jobutil.MaxIdentifierBytes
 
 func validateIdentifier(value, label string) error {
-	if !utf8.ValidString(value) {
-		return fmt.Errorf("%s must be valid UTF-8", label)
-	}
-	if len(value) > maxIdentifierBytes {
-		return fmt.Errorf("%s must not exceed %d bytes", label, maxIdentifierBytes)
-	}
-	for _, char := range value {
-		if !unicode.IsPrint(char) {
-			return fmt.Errorf("%s must contain only printable characters", label)
-		}
-	}
-	return nil
+	return jobutil.ValidateIdentifier(value, label)
 }

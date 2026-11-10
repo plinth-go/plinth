@@ -2,6 +2,7 @@ package depscheck
 
 import (
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -26,32 +27,74 @@ var optionalDependencies = []string{
 }
 
 var optionalFrameworkPackages = []string{
-	modulePath + "kernel/websocket",
+	modulePath + "kernel/wshub",
 	modulePath + "kernel/auth",
 	modulePath + "kernel/authz",
 	modulePath + "kernel/cors",
 	modulePath + "kernel/uploads",
 	modulePath + "platform/csrf",
-	modulePath + "platform/csrf/redis",
+	modulePath + "platform/rediscsrf",
 	modulePath + "platform/jobs",
 	modulePath + "platform/jobs/admin",
+	modulePath + "platform/jobs/jobutil",
 	modulePath + "platform/jobs/migrations",
+	modulePath + "platform/pgjobs",
 	modulePath + "platform/migrate",
+	modulePath + "platform/pgmigrate",
 	modulePath + "platform/idempotency",
-	modulePath + "platform/jwt",
-	modulePath + "platform/oidc",
+	modulePath + "platform/jwtauth",
+	modulePath + "platform/oidcauth",
 	modulePath + "platform/redislock",
 	modulePath + "platform/objectstore",
 	modulePath + "platform/objectstore/localfs",
-	modulePath + "platform/objectstore/s3",
-	modulePath + "platform/observability/prometheus",
-	modulePath + "platform/observability/otel",
-	modulePath + "platform/postgres",
+	modulePath + "platform/objectstore/s3store",
+	modulePath + "platform/observability/prommetrics",
+	modulePath + "platform/observability/oteltrace",
+	modulePath + "platform/pgdb",
 	modulePath + "platform/ratelimit",
-	modulePath + "platform/ratelimit/redis",
-	modulePath + "platform/redis",
+	modulePath + "platform/redislimit",
+	modulePath + "platform/redisclient",
 	modulePath + "platform/session",
-	modulePath + "platform/session/redis",
+	modulePath + "platform/redissession",
+}
+
+func TestPublicPackageNamesAreUnambiguous(t *testing.T) {
+	command := exec.Command(goTool(t), "list", "-f", "{{.ImportPath}} {{.Name}}", "./...")
+	command.Dir = moduleRoot(t)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go list packages: %v", err)
+	}
+	forbidden := map[string]bool{
+		"jwt":        true,
+		"oidc":       true,
+		"otel":       true,
+		"postgres":   true,
+		"prometheus": true,
+		"redis":      true,
+		"s3":         true,
+		"websocket":  true,
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			t.Fatalf("unexpected go list line %q", line)
+		}
+		importPath, packageName := fields[0], fields[1]
+		if packageName == "main" {
+			continue
+		}
+		relative := strings.TrimPrefix(importPath, modulePath)
+		if relative == "internal" || strings.HasPrefix(relative, "internal/") || strings.Contains(relative, "/internal/") {
+			continue
+		}
+		if got := path.Base(importPath); got != packageName {
+			t.Errorf("package %s declares %q; directory name is %q", importPath, packageName, got)
+		}
+		if forbidden[packageName] {
+			t.Errorf("package %s uses a bare vendor name; use technology-plus-responsibility naming", importPath)
+		}
+	}
 }
 
 func TestCorePackagesDoNotCompileOptionalDependencies(t *testing.T) {
@@ -84,32 +127,35 @@ func TestOptionalPackagesOnlyPullTheirDependencies(t *testing.T) {
 		pkg     string
 		allowed map[string]bool
 	}{
-		{pkg: "kernel/websocket", allowed: set("github.com/gorilla/websocket")},
+		{pkg: "kernel/wshub", allowed: set("github.com/gorilla/websocket")},
 		{pkg: "kernel/auth", allowed: set()},
 		{pkg: "kernel/authz", allowed: set()},
 		{pkg: "kernel/cors", allowed: set()},
 		{pkg: "kernel/uploads", allowed: set()},
 		{pkg: "platform/csrf", allowed: set()},
-		{pkg: "platform/csrf/redis", allowed: set("github.com/redis/go-redis/v9")},
-		{pkg: "platform/jobs", allowed: set("github.com/jackc/pgx/v5")},
-		{pkg: "platform/jobs/admin", allowed: set("github.com/jackc/pgx/v5")},
+		{pkg: "platform/rediscsrf", allowed: set("github.com/redis/go-redis/v9")},
+		{pkg: "platform/jobs", allowed: set()},
+		{pkg: "platform/jobs/admin", allowed: set()},
+		{pkg: "platform/jobs/jobutil", allowed: set()},
 		{pkg: "platform/jobs/migrations", allowed: set()},
+		{pkg: "platform/pgjobs", allowed: set("github.com/jackc/pgx/v5")},
 		{pkg: "platform/idempotency", allowed: set("github.com/redis/go-redis/v9")},
-		{pkg: "platform/jwt", allowed: set("github.com/golang-jwt/jwt/v5")},
-		{pkg: "platform/oidc", allowed: set("github.com/coreos/go-oidc/v3", "github.com/go-jose/go-jose/v4")},
+		{pkg: "platform/jwtauth", allowed: set("github.com/golang-jwt/jwt/v5")},
+		{pkg: "platform/oidcauth", allowed: set("github.com/coreos/go-oidc/v3", "github.com/go-jose/go-jose/v4")},
 		{pkg: "platform/objectstore", allowed: set()},
 		{pkg: "platform/objectstore/localfs", allowed: set()},
-		{pkg: "platform/objectstore/s3", allowed: set("github.com/aws/aws-sdk-go-v2", "github.com/aws/smithy-go")},
+		{pkg: "platform/objectstore/s3store", allowed: set("github.com/aws/aws-sdk-go-v2", "github.com/aws/smithy-go")},
 		{pkg: "platform/redislock", allowed: set("github.com/redis/go-redis/v9")},
 		{pkg: "platform/ratelimit", allowed: set()},
-		{pkg: "platform/ratelimit/redis", allowed: set("github.com/redis/go-redis/v9")},
-		{pkg: "platform/observability/prometheus", allowed: set("github.com/prometheus/client_golang")},
-		{pkg: "platform/observability/otel", allowed: set("go.opentelemetry.io/otel")},
-		{pkg: "platform/postgres", allowed: set("github.com/jackc/pgx/v5")},
-		{pkg: "platform/redis", allowed: set("github.com/redis/go-redis/v9")},
+		{pkg: "platform/redislimit", allowed: set("github.com/redis/go-redis/v9")},
+		{pkg: "platform/observability/prommetrics", allowed: set("github.com/prometheus/client_golang")},
+		{pkg: "platform/observability/oteltrace", allowed: set("go.opentelemetry.io/otel")},
+		{pkg: "platform/pgdb", allowed: set("github.com/jackc/pgx/v5")},
+		{pkg: "platform/redisclient", allowed: set("github.com/redis/go-redis/v9")},
 		{pkg: "platform/session", allowed: set("github.com/alexedwards/scs/v2")},
-		{pkg: "platform/session/redis", allowed: set("github.com/alexedwards/scs/v2", "github.com/redis/go-redis/v9")},
-		{pkg: "platform/migrate", allowed: set("github.com/jackc/pgx/v5", "github.com/pressly/goose/v3")},
+		{pkg: "platform/redissession", allowed: set("github.com/alexedwards/scs/v2", "github.com/redis/go-redis/v9")},
+		{pkg: "platform/migrate", allowed: set("github.com/pressly/goose/v3")},
+		{pkg: "platform/pgmigrate", allowed: set("github.com/jackc/pgx/v5", "github.com/pressly/goose/v3")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.pkg, func(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/plinth-go/plinth/internal/atomicfile"
 	"github.com/plinth-go/plinth/kernel"
+	"github.com/plinth-go/plinth/utils"
 	"github.com/urfave/cli/v3"
 )
 
@@ -47,10 +48,7 @@ func Main(application Application) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := Run(ctx, application, os.Args[1:]); err != nil {
-		name := application.Name
-		if name == "" {
-			name = "app"
-		}
+		name := applicationName(application)
 		fmt.Fprintln(os.Stderr, name+":", err)
 		os.Exit(1)
 	}
@@ -312,8 +310,5 @@ func validateCommands(commands []*Command) error {
 }
 
 func applicationName(application Application) string {
-	if application.Name == "" {
-		return "app"
-	}
-	return application.Name
+	return utils.IfEmptyElse(application.Name, "app")
 }

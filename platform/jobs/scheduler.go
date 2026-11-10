@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/plinth-go/plinth/utils"
 )
 
 // SchedulerConfig controls due-schedule polling. Its env tags make it an
@@ -53,13 +54,8 @@ func WithSchedulerObserver(observer Observer) SchedulerOption {
 	}
 }
 
-type schedulerStore interface {
-	ReconcileSchedules(context.Context, []Schedule) error
-	DispatchDueSchedules(context.Context, int) (int, error)
-}
-
 type Scheduler struct {
-	store     schedulerStore
+	store     SchedulerStore
 	logger    *slog.Logger
 	cfg       SchedulerConfig
 	schedules []Schedule
@@ -79,18 +75,12 @@ type Scheduler struct {
 	failureOnce sync.Once
 }
 
-func NewScheduler(store *Store, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler {
-	var backend schedulerStore
-	if store != nil && store.pool != nil {
-		backend = store
-	}
-	return newScheduler(backend, logger, cfg, opts...)
+func NewScheduler(store SchedulerStore, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler {
+	return newScheduler(store, logger, cfg, opts...)
 }
 
-func newScheduler(store schedulerStore, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler {
-	if logger == nil {
-		logger = slog.Default()
-	}
+func newScheduler(store SchedulerStore, logger *slog.Logger, cfg SchedulerConfig, opts ...SchedulerOption) *Scheduler {
+	logger = utils.IfNilElse(logger, slog.Default())
 	logger = logger.With("component", "scheduler")
 	defaults := DefaultSchedulerConfig()
 	if cfg.Interval < 0 {
@@ -117,8 +107,9 @@ func newScheduler(store schedulerStore, logger *slog.Logger, cfg SchedulerConfig
 
 func (s *Scheduler) Name() string { return "jobs-scheduler" }
 
-// Declare registers a schedule that is reconciled into Postgres when the
-// component starts. Declarations are code-owned; Postgres is the durable state.
+// Declare registers a schedule that is reconciled into the configured store
+// when the component starts. Declarations are code-owned; the store is the
+// durable state.
 func (s *Scheduler) Declare(schedule Schedule) error {
 	if s == nil {
 		return fmt.Errorf("job scheduler is nil")
@@ -144,37 +135,13 @@ func (s *Scheduler) Declare(schedule Schedule) error {
 	return nil
 }
 
-func normalizeSchedule(schedule Schedule) (Schedule, error) {
-	schedule.Name = strings.TrimSpace(schedule.Name)
-	schedule.Kind = strings.TrimSpace(schedule.Kind)
-	if schedule.Name == "" || schedule.Kind == "" {
-		return Schedule{}, fmt.Errorf("schedule name and kind are required")
-	}
-	if err := validateIdentifier(schedule.Name, "schedule name"); err != nil {
-		return Schedule{}, err
-	}
-	if err := validateIdentifier(schedule.Kind, "schedule kind"); err != nil {
-		return Schedule{}, err
-	}
-	if schedule.Interval < time.Second {
-		return Schedule{}, fmt.Errorf("schedule %q interval must be at least one second", schedule.Name)
-	}
-	if schedule.Interval%time.Second != 0 {
-		return Schedule{}, fmt.Errorf("schedule %q interval must be a whole number of seconds", schedule.Name)
-	}
-	if schedule.Interval > time.Duration(1<<31-1)*time.Second {
-		return Schedule{}, fmt.Errorf("schedule %q interval exceeds the Postgres integer-seconds limit", schedule.Name)
-	}
-	return schedule, nil
-}
-
 func (s *Scheduler) Start(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("job scheduler is nil")
 	}
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
-	if s.store == nil {
+	if isNilInterface(s.store) {
 		return fmt.Errorf("scheduler requires a job store")
 	}
 	if err := s.failureCause(); err != nil {
