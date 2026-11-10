@@ -1,0 +1,45 @@
+name: Extended fuzz
+
+on:
+  schedule:
+    - cron: "23 4 * * 2"
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: Fuzz duration per target (Go duration, for example 60s or 5m)
+        required: false
+        default: 60s
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extended-fuzz
+  cancel-in-progress: false
+
+jobs:
+  kernel:
+    name: Extended fuzz
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FUZZ_DURATION: ${{ github.event.inputs.duration || '60s' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - name: Run extended fuzz targets
+        run: ./scripts/fuzz-extended.sh "$FUZZ_DURATION"
+      - name: Upload failing corpus and logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failure-${{ github.run_id }}
+          path: |
+            fuzz-results/
+            kernel/testdata/fuzz/
+          if-no-files-found: ignore
+          retention-days: 14

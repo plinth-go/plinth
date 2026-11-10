@@ -10,7 +10,7 @@ contract、默认安全行为和依赖边界兼容；路线图不构成提前修
 `v1.2` 聚焦兼容性增强、验证深度和部署可操作性：
 
 - [x] 增加 macOS 与 Windows CI 覆盖：<https://github.com/plinth-go/plinth/issues/15>
-- [ ] 定期运行更长时间的 fuzz：<https://github.com/plinth-go/plinth/issues/16>
+- [x] 定期运行更长时间的 fuzz：<https://github.com/plinth-go/plinth/issues/16>
 - [ ] 建立路由与绑定 benchmark 基线：<https://github.com/plinth-go/plinth/issues/17>
 - [ ] 增加可运行的 TLS / HTTP/2 部署示例：<https://github.com/plinth-go/plinth/issues/18>
 
