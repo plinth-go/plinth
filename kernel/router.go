@@ -509,8 +509,9 @@ func (r *Router) chain(h http.Handler, group ...Middleware) http.Handler {
 // declarative permissions without re-parsing the matched path.
 func (r *Router) routeHandler(meta OperationMeta, h http.Handler, group ...Middleware) http.Handler {
 	next := r.chain(h, group...)
+	operation := &meta
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ctx := context.WithValue(req.Context(), operationContextKey{}, meta)
+		ctx := context.WithValue(req.Context(), operationContextKey{}, operation)
 		next.ServeHTTP(w, req.WithContext(ctx))
 	})
 }
@@ -708,6 +709,7 @@ type bindField struct {
 	in           string
 	name         string
 	headerName   string
+	querySlot    int
 	required     bool
 	defaultValue string
 	hasDefault   bool
@@ -736,6 +738,7 @@ func analyzeInput[In any](fieldDocs map[string]string, method, pattern string) (
 	}
 
 	fields := make([]bindField, 0, t.NumField())
+	queryFields := 0
 	var body *bindField
 	parameterSchemas := newSchemaBuilder(fieldDocs, schemaParameter)
 	bodySchemas := newSchemaBuilder(fieldDocs, schemaRequest)
@@ -787,8 +790,9 @@ func analyzeInput[In any](fieldDocs map[string]string, method, pattern string) (
 			setter, repeated := parameterSetter(field.Type)
 			fields = append(fields, bindField{
 				index: field.Index, in: "query", name: name, required: required,
-				defaultValue: check.raw, hasDefault: hasDefault, repeated: repeated, set: setter,
+				querySlot: queryFields, defaultValue: check.raw, hasDefault: hasDefault, repeated: repeated, set: setter,
 			})
+			queryFields++
 			continue
 		}
 		if name, options, ok := tagValue(field, "header"); ok {
@@ -954,11 +958,18 @@ func bindInput[In any](validate *validator.Validate, fields []bindField, body *b
 	locations := map[string]string{}
 	inputType := reflect.TypeFor[In]()
 	hasQueryFields := false
+	queryFieldCount := 0
+	var queryIndex map[string]int
 	for _, f := range fields {
 		field := inputType.FieldByIndex(f.index)
 		locations[field.Name] = f.in
 		if f.in == "query" {
 			hasQueryFields = true
+			queryFieldCount++
+			if queryIndex == nil {
+				queryIndex = make(map[string]int)
+			}
+			queryIndex[f.name] = f.querySlot
 		}
 		for _, tagName := range []string{"json", "query", "header", "path"} {
 			name, _, _ := strings.Cut(field.Tag.Get(tagName), ",")
@@ -972,16 +983,36 @@ func bindInput[In any](validate *validator.Validate, fields []bindField, body *b
 	inputPointer := reflect.PointerTo(inputType)
 	contextValidator := inputPointer.Implements(reflect.TypeFor[ContextValidator]())
 	plainValidator := inputPointer.Implements(reflect.TypeFor[PlainValidator]())
+	if len(fields) == 0 && body == nil && !validateStruct && !applySlugFields && !contextValidator && !plainValidator {
+		return func(*http.Request) (In, error) {
+			var in In
+			return in, nil
+		}
+	}
 
 	return func(req *http.Request) (In, error) {
 		var in In
 		rv := reflect.ValueOf(&in).Elem()
 		errs := make([]FieldError, 0)
+		var fastQuery []queryValue
 		var queryValues url.Values
+		var singleQueryValue [1]string
 		var queryErr error
 		if hasQueryFields && req.URL.RawQuery != "" {
-			queryValues, queryErr = url.ParseQuery(req.URL.RawQuery)
-			if queryErr != nil {
+			var inline [inlineQueryValueLimit]queryValue
+			if queryFieldCount <= inlineQueryValueLimit {
+				fastQuery = inline[:queryFieldCount]
+			} else {
+				fastQuery = make([]queryValue, queryFieldCount)
+			}
+			if strings.Count(req.URL.RawQuery, "&")+1 > maxDefaultQueryParams {
+				fastQuery = nil
+				queryValues, queryErr = url.ParseQuery(req.URL.RawQuery)
+				if queryErr != nil {
+					errs = append(errs, FieldError{Location: "query", Field: "query", Message: "malformed query string: " + queryErr.Error()})
+				}
+			} else if queryErr = scanQuery(req.URL.RawQuery, queryIndex, fastQuery); queryErr != nil {
+				fastQuery = nil
 				errs = append(errs, FieldError{Location: "query", Field: "query", Message: "malformed query string: " + queryErr.Error()})
 			}
 		}
@@ -1004,8 +1035,19 @@ func bindInput[In any](validate *validator.Validate, fields []bindField, body *b
 				if queryErr != nil {
 					continue
 				}
-				values, ok := queryValues[f.name]
-				if !ok || len(values) == 0 {
+				var values []string
+				if fastQuery != nil {
+					value := &fastQuery[f.querySlot]
+					if value.count == 1 {
+						singleQueryValue[0] = value.first
+						values = singleQueryValue[:1]
+					} else {
+						values = value.all
+					}
+				} else {
+					values = queryValues[f.name]
+				}
+				if len(values) == 0 {
 					if f.required {
 						errs = append(errs, FieldError{Location: "query", Field: f.name, Message: "is required"})
 					} else if f.hasDefault {
@@ -1416,7 +1458,7 @@ func writeOutput[Out any](defaultStatus int, produces []string, logger *slog.Log
 			return
 		}
 
-		body, err := jsonx.MarshalResponse(&out)
+		body, err := jsonx.MarshalResponseBuffer(&out)
 		if err != nil {
 			if logger != nil {
 				logger.Error("encode JSON response",
@@ -1425,11 +1467,12 @@ func writeOutput[Out any](defaultStatus int, produces []string, logger *slog.Log
 			WriteProblem(w, req, Internal(err), nil)
 			return
 		}
+		defer body.Release()
 
 		applyHeaders(w.Header(), headers)
 		setJSONHeaders(w.Header())
 		w.WriteHeader(defaultStatus)
-		if err := writeBody(w, body); err != nil && logger != nil {
+		if err := writeBody(w, body.Bytes()); err != nil && logger != nil {
 			logger.Error("write JSON response",
 				"method", req.Method, "path", req.URL.Path, "error", err)
 		}
@@ -1626,8 +1669,11 @@ type operationContextKey struct{}
 // OperationFromContext returns read-only metadata for the matched route. The
 // router attaches it before application middleware runs.
 func OperationFromContext(ctx context.Context) (OperationMeta, bool) {
-	meta, ok := ctx.Value(operationContextKey{}).(OperationMeta)
-	return meta, ok
+	meta, ok := ctx.Value(operationContextKey{}).(*OperationMeta)
+	if !ok || meta == nil {
+		return OperationMeta{}, false
+	}
+	return *meta, true
 }
 
 func inputPermissions(t reflect.Type) []string {

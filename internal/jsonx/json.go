@@ -9,6 +9,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 var (
@@ -135,4 +136,55 @@ func MarshalResponse(out any) ([]byte, error) {
 		return nil, err
 	}
 	return append(body, '\n'), nil
+}
+
+const maxPooledResponseBuffer = 64 << 10
+
+var responseBufferPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
+
+// ResponseBuffer is a fully encoded, newline-terminated JSON response. Release
+// it after the response writer has finished with Bytes so the buffer can be
+// reused. The bytes are only valid until Release is called.
+type ResponseBuffer struct {
+	buffer *bytes.Buffer
+}
+
+// MarshalResponseBuffer encodes out into a reusable buffer. Unlike
+// MarshalResponse, it avoids a second allocation for the trailing newline and
+// keeps small response buffers for reuse across requests.
+func MarshalResponseBuffer(out any) (ResponseBuffer, error) {
+	buffer := responseBufferPool.Get().(*bytes.Buffer)
+	buffer.Reset()
+	if err := jsonv2.MarshalWrite(buffer, out, responseOptions); err != nil {
+		releaseResponseBuffer(buffer)
+		return ResponseBuffer{}, err
+	}
+	buffer.WriteByte('\n')
+	return ResponseBuffer{buffer: buffer}, nil
+}
+
+// Bytes returns the encoded response body.
+func (b ResponseBuffer) Bytes() []byte {
+	if b.buffer == nil {
+		return nil
+	}
+	return b.buffer.Bytes()
+}
+
+// Release returns the backing buffer to the pool.
+func (b ResponseBuffer) Release() {
+	if b.buffer == nil {
+		return
+	}
+	releaseResponseBuffer(b.buffer)
+}
+
+func releaseResponseBuffer(buffer *bytes.Buffer) {
+	if buffer.Cap() > maxPooledResponseBuffer {
+		return
+	}
+	buffer.Reset()
+	responseBufferPool.Put(buffer)
 }
