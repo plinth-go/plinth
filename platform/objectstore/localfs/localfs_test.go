@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/plinth-go/plinth/platform/objectstore"
@@ -64,6 +65,9 @@ func TestStoreRejectsTraversalAndSymlinks(t *testing.T) {
 	}
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("create directory symlink: %v", err)
+		}
 		t.Fatal(err)
 	}
 	if _, err := store.Put(ctx, "link/file.txt", bytes.NewReader([]byte("x")), 1, objectstore.PutOptions{}); err == nil {

@@ -203,7 +203,11 @@ func packageDependencies(t *testing.T, pkg string) map[string]bool {
 func goTool(t *testing.T) string {
 	t.Helper()
 	if root := runtime.GOROOT(); root != "" {
-		candidate := filepath.Join(root, "bin", "go")
+		name := "go"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		candidate := filepath.Join(root, "bin", name)
 		if info, err := exec.LookPath(candidate); err == nil && info != "" {
 			return candidate
 		}

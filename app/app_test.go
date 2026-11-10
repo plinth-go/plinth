@@ -726,7 +726,7 @@ func TestEnvCommandPreservesExistingFileWithoutForce(t *testing.T) {
 	if statErr != nil {
 		t.Fatal(statErr)
 	}
-	if info.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
 	}
 }
@@ -750,10 +750,10 @@ func TestEnvCommandForceAtomicallyReplacesFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.SameFile(before, after) {
+	if runtime.GOOS != "windows" && os.SameFile(before, after) {
 		t.Fatal("force rewrote the file in place instead of replacing it atomically")
 	}
-	if after.Mode().Perm() != 0o640 {
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0o640 {
 		t.Fatalf("mode = %o, want 640", after.Mode().Perm())
 	}
 	data, err := os.ReadFile(out)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -53,10 +54,10 @@ func TestRunAtomicallyReplacesOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if os.SameFile(before, after) {
+	if runtime.GOOS != "windows" && os.SameFile(before, after) {
 		t.Fatal("generated file was rewritten in place instead of atomically replaced")
 	}
-	if after.Mode().Perm() != 0o640 {
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0o640 {
 		t.Fatalf("mode = %o, want 640", after.Mode().Perm())
 	}
 	entries, err := os.ReadDir(filepath.Dir(out))
