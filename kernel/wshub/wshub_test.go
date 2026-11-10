@@ -146,10 +146,77 @@ func TestHubRejectsNilInputsBeforeUpgrade(t *testing.T) {
 	}
 }
 
+func TestHubDoesNotLogDuplicateCloseControl(t *testing.T) {
+	streams := kernel.NewStreamRegistry()
+	var logs bytes.Buffer
+	hub := NewHub(streams, slog.New(slog.NewTextHandler(&logs, nil)))
+	served := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(served)
+		_ = hub.Serve(w, r, func(_ context.Context, conn *gorilla.Conn) error {
+			_, _, err := conn.ReadMessage()
+			return err
+		})
+	}))
+	defer server.Close()
+	defer streams.CloseStreams()
+
+	url := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteControl(gorilla.CloseMessage, nil, time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-served:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not finish the WebSocket close handshake")
+	}
+	if strings.Contains(logs.String(), "websocket close control") {
+		t.Fatalf("duplicate close control was logged: %q", logs.String())
+	}
+}
+
 func TestNormalizeErrorTreatsTypedNilAsNil(t *testing.T) {
 	var typedNil *typedNilWebSocketError
 	if err := NormalizeError(typedNil); err != nil {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestNormalizeErrorTreatsEmptyCloseAsNormal(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantNil bool
+	}{
+		{name: "normal", err: &gorilla.CloseError{Code: gorilla.CloseNormalClosure}, wantNil: true},
+		{name: "going away", err: &gorilla.CloseError{Code: gorilla.CloseGoingAway}, wantNil: true},
+		{name: "no status", err: &gorilla.CloseError{Code: gorilla.CloseNoStatusReceived}, wantNil: true},
+		{name: "abnormal", err: &gorilla.CloseError{Code: gorilla.CloseAbnormalClosure}},
+		{name: "internal error", err: &gorilla.CloseError{Code: gorilla.CloseInternalServerErr}},
+		{name: "canceled", err: context.Canceled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeError(tt.err)
+			if tt.wantNil {
+				if got != nil {
+					t.Fatalf("NormalizeError(%v) = %v, want nil", tt.err, got)
+				}
+				return
+			}
+			if got == nil || !errors.Is(got, tt.err) {
+				t.Fatalf("NormalizeError(%v) = %v, want original error", tt.err, got)
+			}
+		})
 	}
 }
 
