@@ -16,6 +16,7 @@
 | 想做什么 | 先看 |
 |---|---|
 | 5 分钟运行一个 typed endpoint | [`examples/hello`](examples/hello) |
+| 运行 TLS + HTTP/2 或反向代理终止示例 | [`examples/tls-http2`](examples/tls-http2) |
 | typed binding、参数和 OpenAPI 细节 | [`examples/minimal-http.md`](examples/minimal-http.md) |
 | 配置、日志、`app.Main`、自定义子命令 | [`examples/app-shell.md`](examples/app-shell.md) |
 | JWT 认证 + 数据库权限 + 接口鉴权 | [`examples/jwt-postgres-authz.md`](examples/jwt-postgres-authz.md) |
@@ -29,9 +30,9 @@
 | 选择 Postgres/Redis/jobs/对象存储 | [`examples/optional-platform.md`](examples/optional-platform.md) |
 | 让 AI/代码代理快速定位资料 | [`llms.txt`](llms.txt) |
 
-`examples/` 多数文件是**文档型示例**，允许伪代码，也不包含业务模型；`examples/hello/` 是
-唯一可运行的 quickstart，不依赖 Postgres/Redis，并由 `go test ./...` 覆盖。真实业务应用
-不放进框架模块，避免示例变成另一套需要维护的产品。
+`examples/` 多数文件是**文档型示例**，允许伪代码，也不包含业务模型；`examples/hello/`
+是无依赖 quickstart，`examples/tls-http2/` 是 TLS/HTTP2 部署示例，二者都由
+`go test ./...` 覆盖。真实业务应用不放进框架模块，避免示例变成另一套需要维护的产品。
 除非专门演示错误处理，示例默认返回的 error 为 nil，并用 `_` 接收。
 
 ## 已实现
@@ -1021,6 +1022,10 @@ runtime.NewHTTP(addr, router, streams, logger, runtime.WithHTTPConfig(config))
 `TLSConfig` 会被克隆，并且必须包含 `Certificates`、`GetCertificate` 或
 `GetConfigForClient`。`EnableHTTP2` 需要 TLS；默认仍只启用 HTTP/1。证书加载、
 握手、ALPN 协商和连接行为都由 `crypto/tls` / `net/http` 负责。
+
+可直接运行的进程内 TLS + HTTP/2 与反向代理明文 listener 对照见
+[`examples/tls-http2`](examples/tls-http2)。示例包含本地开发证书生成、curl 验证命令、
+代理边界说明和生产责任提醒。
 
 需要更细的协议组合时使用 `Protocols *http.Protocols`；它与 `EnableHTTP2` 互斥。
 例如 h2c 用 `SetUnencryptedHTTP2(true)`，TLS HTTP/2 用 `SetHTTP1(true)` +

@@ -21,6 +21,8 @@ Plinth 是应用内核，不是托管服务，也不是完整的访问控制产�
 - `X-Request-ID` 只复用单个、长度有限、可打印 ASCII 的客户端值，避免日志注入；其他
   情况生成新值。
 - TLS、HTTP/2、h2c 只做配置组合校验并接到 `net/http`/`crypto/tls`；框架不复制协议栈。
+  进程内终止与反向代理终止的可运行对照见
+  [`examples/tls-http2`](examples/tls-http2)。
 - 健康检查、OpenAPI 和静态资源默认使用 `no-store`/`nosniff` 等边界；需要公开或隐藏
   哪些运维端点由应用配置。
 - `kernel/cors` 只接受显式 origin/method/header allowlist；通配符 origin 不允许与
@@ -46,6 +48,8 @@ Plinth 是应用内核，不是托管服务，也不是完整的访问控制产�
 - 网关级 DDoS 防护、恶意请求拦截和全局连接/带宽限制；进程内或 Redis 固定窗口限流
   都不是网络层防护。
 - 反向代理后的 `X-Forwarded-*` 信任策略；Plinth 不会自动推断客户端 scheme 或真实 IP。
+  [`examples/tls-http2`](examples/tls-http2) 展示两种 listener 的差异，但不替应用决定
+  可信代理或生产证书策略。
 - `multipart/form-data`、大文件上传、对象存储、临时文件清理和恶意内容检测。
 - 传给 `WriteFile`/`WriteAttachment` 的文件路径或文件名。不要直接把未校验的用户输入
   当作服务器文件路径；下载文件名也不能包含路径分隔符或控制字符。

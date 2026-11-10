@@ -5,8 +5,9 @@
 ## Start here
 
 - [README](README.md): authoritative API and deployment reference.
-- [Examples index](examples/README.md): documentation-only recipes plus the single runnable quickstart.
+- [Examples index](examples/README.md): documentation-only recipes plus runnable quickstart and deployment examples.
 - [Runnable quickstart](examples/hello): dependency-free hello endpoint covered by `go test ./...`.
+- [TLS and HTTP/2](examples/tls-http2): runnable in-process TLS/HTTP2 and reverse-proxy listener comparison.
 - [Minimal HTTP](examples/minimal-http.md): typed endpoints and binding.
 - [App shell](examples/app-shell.md): config, commands, logging, runtime.
 - [JWT + Postgres authz](examples/jwt-postgres-authz.md): Bearer auth, DB permissions, route enforcement.

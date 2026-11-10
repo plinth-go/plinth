@@ -1,6 +1,7 @@
 # Plinth 使用示例
 
-这里多数文件是**文档型示例**，不是可运行的示例应用；`hello/` 是唯一可运行的 quickstart。
+这里多数文件是**文档型示例**，不是可运行的示例应用；`hello/` 是无依赖 quickstart，
+`tls-http2/` 是可运行的 TLS/HTTP2 部署示例。
 
 - 示例只回答“框架应该怎样被调用”，不包含领域模型、业务表结构、演示 CRUD 或业务规则。
 - 权限、会话等基础设施可以出现最小占位 SQL，但必须明确表结构由应用定义。
@@ -9,7 +10,7 @@
 - 单个代码块尽量控制在 15–35 行；超出时拆成“接入 + 声明”或“配置 + 装配”两个块。
 - 框架自己的类型、函数名和 tag 应尽量保持真实。示例与公开 API 冲突时，以
   [`../README.md`](../README.md) 和公开 API 快照为准。
-- 除 `hello/` 外，示例不进入 `go test`、构建或发布二进制的依赖闭包。
+- 除 `hello/` 和 `tls-http2/` 外，示例不进入 `go test`、构建或发布二进制的依赖闭包。
 - 真实业务应用继续放在独立仓库；`plinth-example` 是集成参考应用，不是官方学习入口。
 
 示例放在框架仓库内，是因为它们需要和 API 同版本演进、同一 PR review、同一 tag 发布。
@@ -20,6 +21,7 @@ AI 或新维护者不需要跨仓库拼接上下文，也不会把参考应用�
 | 想了解 | 示例 |
 |---|---|
 | 无外部依赖、可直接运行的最小服务 | [hello/](hello/README.md) |
+| TLS + HTTP/2 或反向代理终止 listener | [tls-http2/](tls-http2/README.md) |
 | 最小 typed endpoint、路径/query/header/body、错误返回 | [minimal-http.md](minimal-http.md) |
 | `app.Main`、配置、日志、自定义子命令、启动顺序 | [app-shell.md](app-shell.md) |
 | JWT 认证 + Postgres 权限 + 接口鉴权 | [jwt-postgres-authz.md](jwt-postgres-authz.md) |
@@ -35,6 +37,7 @@ AI 或新维护者不需要跨仓库拼接上下文，也不会把参考应用�
 ## 推荐阅读路径
 
 - 第一次接入：`hello/` → `minimal-http.md` → `app-shell.md` → `testing.md`
+- 部署到公网：`tls-http2/` → `../SECURITY.md` → `security.md`
 - 做公网 API：`security.md` → `jwt-postgres-authz.md` / `authz.md` →
   `csrf.md` / `session.md` / `cors.md` / `ratelimit.md` → `../SECURITY.md`
 - 只补一个能力：直接打开索引里的单篇，不需要先读安全总览
