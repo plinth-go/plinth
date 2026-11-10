@@ -3,7 +3,7 @@
 Plinth 使用 Semantic Versioning 发布 Go module。开发记录里的 `v177`、`v181`
 等编号只是内部迭代号，不是 module version，也不进入 tag。
 
-当前稳定版本是 **`v1.1.0`**。v1 内保持公开 API、行为契约和安全边界兼容；未发布变更先
+当前稳定版本是 **`v1.2.0`**。v1 内保持公开 API、行为契约和安全边界兼容；未发布变更先
 记录在 `CHANGELOG.md` 的 `[Unreleased]` 下，发布时再冻结版本号和日期并创建 tag。
 
 `v1.1.0` 是在项目尚无已知外部消费者时重新冻结的 v1 基线。它重整了 v1.0.0 的公开
@@ -117,15 +117,15 @@ dispatch。它在空模块中获取 `github.com/plinth-go/plinth@latest`，构�
 5. 在当前 release commit 上创建 annotated tag：
 
 ```sh
-git tag -a v1.1.0 -m "Plinth v1.1.0"
-git show --stat --oneline v1.1.0
+git tag -a v1.2.0 -m "Plinth v1.2.0"
+git show --stat --oneline v1.2.0
 ```
 
 6. 推送 commit 和 tag；在发布记录中写入 tag、commit 和验证结果。
 7. 用干净模块验证可获取和可构建：
 
 ```sh
-GOFLAGS=-mod=mod go list -m github.com/plinth-go/plinth@v1.1.0
+GOFLAGS=-mod=mod go list -m github.com/plinth-go/plinth@v1.2.0
 ```
 
 8. 发布后 smoke test 失败时，先停止继续宣传并记录影响；需要撤回版本时，使用 Go

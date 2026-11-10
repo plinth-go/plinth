@@ -71,7 +71,7 @@
 在业务模块中安装已经发布的版本，然后直接 import：
 
 ```sh
-go get github.com/plinth-go/plinth@v1.1.0
+go get github.com/plinth-go/plinth@v1.2.0
 ```
 
 ```go
@@ -159,7 +159,7 @@ import (
 ## 版本与发布
 
 对外版本使用 Semantic Versioning 的 Go module tag；开发记录里的 `vNNN` 等编号只是内部
-迭代号，不是 release version。当前稳定版本是 **`v1.1.0`**，公开 API 和兼容性规则见
+迭代号，不是 release version。当前稳定版本是 **`v1.2.0`**，公开 API 和兼容性规则见
 [`RELEASING.md`](RELEASING.md)，版本历史见 [`CHANGELOG.md`](CHANGELOG.md)，后续方向见
 [`ROADMAP.md`](ROADMAP.md)。
 
