@@ -1,12 +1,12 @@
 package kernel
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/plinth-go/plinth/internal/jsonx"
 )
 
 // Problem follows RFC 9457 Problem Details.
@@ -188,13 +188,14 @@ func WriteProblem(w http.ResponseWriter, r *http.Request, err error, logf func(s
 		}
 	}
 
-	var body bytes.Buffer
-	if err := json.NewEncoder(&body).Encode(problem); err != nil {
+	body, err := jsonx.MarshalResponseBuffer(problem)
+	if err != nil {
 		if logf != nil {
 			logf("encode problem response", "method", method, "path", path, "error", err)
 		}
 		return
 	}
+	defer body.Release()
 	setProblemHeaders(w.Header())
 	w.WriteHeader(problem.Status)
 	if err := writeBody(w, body.Bytes()); err != nil && logf != nil {

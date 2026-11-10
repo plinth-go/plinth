@@ -266,20 +266,19 @@ type Responder interface {
 	Respond(http.ResponseWriter, *http.Request) error
 }
 type Router struct {
-	mux             *http.ServeMux
-	logger          *slog.Logger
-	title           string
-	version         string
-	validate        *validator.Validate
-	validationTags  map[string]bool
-	middleware      []Middleware
-	ops             []OperationMeta
-	docs            DocSet
-	frozen          bool
-	opsMu           sync.Mutex
-	opsRevision     uint64
-	openapiJSON     []byte
-	openapiRevision uint64
+	mux            *http.ServeMux
+	logger         *slog.Logger
+	title          string
+	version        string
+	validate       *validator.Validate
+	validationTags map[string]bool
+	middleware     []Middleware
+	ops            []OperationMeta
+	docs           DocSet
+	frozen         bool
+	opsMu          sync.Mutex
+	opsRevision    atomic.Uint64
+	openapiCache   atomic.Pointer[openAPICache]
 }
 type SSE struct {
 	w          http.ResponseWriter

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,35 +14,52 @@ import (
 	"net/http"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/plinth-go/plinth/utils"
 )
 
-type requestIDKey struct{}
-
-const maxRequestIDLength = 128
+const (
+	maxRequestIDLength     = 128
+	requestIDHeader        = "X-Request-Id" // http.Header canonical spelling
+	requestIDRandomBytes   = 12
+	requestIDPrefixLength  = requestIDRandomBytes * 2
+	requestIDCounterLength = 16
+)
 
 func RequestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey{}).(string)
-	return id
+	if state := requestContextFrom(ctx); state != nil {
+		return state.requestID
+	}
+	return ""
 }
 
 // RequestID reuses a client-supplied X-Request-ID only when it is unambiguous
 // and safe to echo. Otherwise it generates a fresh ID. The final ID is shared by
 // the response header, request context, Problem instance, and access log.
 func RequestID() func(http.Handler) http.Handler {
+	generator := newRequestIDGenerator()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			values := r.Header.Values("X-Request-ID")
+			values := r.Header[requestIDHeader]
 			id := ""
 			if len(values) == 1 && validRequestID(values[0]) {
 				id = values[0]
 			} else {
-				id = newRequestID()
+				id = generator.next()
 			}
 			w.Header().Set("X-Request-ID", id)
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, id)))
+			if state := requestContextFrom(r.Context()); state != nil {
+				if state.requestID == "" {
+					state.requestID = id
+				} else {
+					r = r.WithContext(&requestContext{Context: r.Context(), requestID: id, operation: state.operation})
+				}
+			} else {
+				r = r.WithContext(&requestContext{Context: r.Context(), requestID: id})
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -155,6 +173,14 @@ func AccessLogWithConfig(logger *slog.Logger, cfg AccessLogConfig) func(http.Han
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !logger.Enabled(r.Context(), cfg.Level) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if state := requestContextFrom(r.Context()); state != nil && state.operation != nil && state.operation.SkipAccessLog {
+				next.ServeHTTP(w, r)
+				return
+			}
 			start := time.Now()
 			sw := acquireStatusWriter(w)
 			defer func() {
@@ -433,10 +459,30 @@ func responseReaderFrom(rw http.ResponseWriter) (io.ReaderFrom, bool) {
 	}
 }
 
-func newRequestID() string {
-	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return time.Now().UTC().Format("20060102150405.000000000")
+type requestIDGenerator struct {
+	prefix  [requestIDPrefixLength]byte
+	counter atomic.Uint64
+}
+
+func newRequestIDGenerator() *requestIDGenerator {
+	var seed [requestIDRandomBytes]byte
+	if _, err := rand.Read(seed[:]); err != nil {
+		now := uint64(time.Now().UnixNano())
+		binary.BigEndian.PutUint64(seed[:8], now)
+		binary.BigEndian.PutUint32(seed[8:], uint32(now>>32)^uint32(now))
 	}
-	return hex.EncodeToString(b[:])
+	var generator requestIDGenerator
+	hex.Encode(generator.prefix[:], seed[:])
+	return &generator
+}
+
+func (g *requestIDGenerator) next() string {
+	var counter [8]byte
+	binary.BigEndian.PutUint64(counter[:], g.counter.Add(1))
+
+	var id [requestIDPrefixLength + 1 + requestIDCounterLength]byte
+	copy(id[:], g.prefix[:])
+	id[requestIDPrefixLength] = '-'
+	hex.Encode(id[requestIDPrefixLength+1:], counter[:])
+	return string(id[:])
 }

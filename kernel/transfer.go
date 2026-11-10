@@ -36,23 +36,26 @@ const (
 	problemContentType   = "application/problem+json; charset=utf-8"
 )
 
+var (
+	noSniffHeaderValues = [1]string{noSniffValue}
+	jsonHeaderValues    = [2]string{noSniffValue, jsonContentTypeValue}
+	problemHeaderValues = [2]string{noSniffValue, problemContentType}
+)
+
 func setNoSniffHeader(header http.Header) {
-	header["X-Content-Type-Options"] = []string{noSniffValue}
+	header["X-Content-Type-Options"] = noSniffHeaderValues[:1:1]
 }
 
 func setJSONHeaders(header http.Header) {
-	// Share one backing array to avoid two identical slice allocations. The
-	// full slice expressions cap each header at its element so Header.Add can
-	// never append into the other header's value.
-	values := []string{noSniffValue, jsonContentTypeValue}
-	header["X-Content-Type-Options"] = values[:1:1]
-	header["Content-Type"] = values[1:2:2]
+	// The full slice expressions cap each header at its element so Header.Add
+	// allocates a new value slice instead of appending into the other header.
+	header["X-Content-Type-Options"] = jsonHeaderValues[:1:1]
+	header["Content-Type"] = jsonHeaderValues[1:2:2]
 }
 
 func setProblemHeaders(header http.Header) {
-	values := []string{noSniffValue, problemContentType}
-	header["X-Content-Type-Options"] = values[:1:1]
-	header["Content-Type"] = values[1:2:2]
+	header["X-Content-Type-Options"] = problemHeaderValues[:1:1]
+	header["Content-Type"] = problemHeaderValues[1:2:2]
 }
 
 // SetHeaders validates and canonicalizes response headers before applying

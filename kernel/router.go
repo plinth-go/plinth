@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -160,20 +161,24 @@ type defaultCheck struct {
 }
 
 type Router struct {
-	mux             *http.ServeMux
-	logger          *slog.Logger
-	title           string
-	version         string
-	validate        *validator.Validate
-	validationTags  map[string]bool
-	middleware      []Middleware
-	ops             []OperationMeta
-	docs            DocSet
-	frozen          bool
-	opsMu           sync.Mutex
-	opsRevision     uint64
-	openapiJSON     []byte
-	openapiRevision uint64
+	mux            *http.ServeMux
+	logger         *slog.Logger
+	title          string
+	version        string
+	validate       *validator.Validate
+	validationTags map[string]bool
+	middleware     []Middleware
+	ops            []OperationMeta
+	docs           DocSet
+	frozen         bool
+	opsMu          sync.Mutex
+	opsRevision    atomic.Uint64
+	openapiCache   atomic.Pointer[openAPICache]
+}
+
+type openAPICache struct {
+	revision uint64
+	document []byte
 }
 
 func NewRouter(logger *slog.Logger, title, version string) *Router {
@@ -472,20 +477,31 @@ func (r *Router) preflightRoutes(routes ...routePattern) {
 // OpenAPIJSON returns an independent snapshot of the generated OpenAPI
 // document. Callers may retain or modify it without affecting the router cache.
 func (r *Router) OpenAPIJSON() []byte {
+	return bytes.Clone(r.openAPIDocument())
+}
+
+func (r *Router) openAPIDocument() []byte {
+	revision := r.opsRevision.Load()
+	if cached := r.openapiCache.Load(); cached != nil && cached.revision == revision {
+		return cached.document
+	}
+
 	r.opsMu.Lock()
 	defer r.opsMu.Unlock()
-	if r.openapiJSON == nil || r.openapiRevision != r.opsRevision {
-		r.openapiJSON = buildOpenAPI(r.title, r.version, r.ops)
-		r.openapiRevision = r.opsRevision
+	revision = r.opsRevision.Load()
+	if cached := r.openapiCache.Load(); cached != nil && cached.revision == revision {
+		return cached.document
 	}
-	return bytes.Clone(r.openapiJSON)
+	document := buildOpenAPI(r.title, r.version, r.ops)
+	r.openapiCache.Store(&openAPICache{revision: revision, document: document})
+	return document
 }
 
 func (r *Router) appendOperation(meta OperationMeta) {
 	r.opsMu.Lock()
 	defer r.opsMu.Unlock()
 	r.ops = append(r.ops, meta)
-	r.opsRevision++
+	r.opsRevision.Add(1)
 }
 
 func (r *Router) operationSnapshot() []OperationMeta {
@@ -511,8 +527,17 @@ func (r *Router) routeHandler(meta OperationMeta, h http.Handler, group ...Middl
 	next := r.chain(h, group...)
 	operation := &meta
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ctx := context.WithValue(req.Context(), operationContextKey{}, operation)
-		next.ServeHTTP(w, req.WithContext(ctx))
+		if state := requestContextFrom(req.Context()); state != nil {
+			if state.operation == nil {
+				state.operation = operation
+			} else {
+				req = req.WithContext(&requestContext{Context: req.Context(), requestID: state.requestID, operation: operation})
+			}
+			next.ServeHTTP(w, req)
+			return
+		}
+		state := &requestContext{Context: req.Context(), operation: operation}
+		next.ServeHTTP(w, req.WithContext(state))
 	})
 }
 
@@ -1427,6 +1452,7 @@ func writeOutput[Out any](defaultStatus int, produces []string, logger *slog.Log
 	bodyless := isBodylessStatus(defaultStatus)
 	hasHeaders := capabilities&(outputPointerHeaderer|outputValueHeaderer) != 0
 	hasResponder := capabilities&(outputPointerResponder|outputValueResponder) != 0
+	compiledProduces := compileProduces(produces)
 	return func(w http.ResponseWriter, req *http.Request, out Out) {
 		var headers http.Header
 		if hasHeaders {
@@ -1446,7 +1472,7 @@ func writeOutput[Out any](defaultStatus int, produces []string, logger *slog.Log
 					WriteProblem(w, req, Internal(errors.New("typed responder output is nil")), logger.Error)
 					return
 				}
-				writeResponder(w, req, responder, produces, headers, logger)
+				writeResponder(w, req, responder, compiledProduces, headers, logger)
 				return
 			}
 		}
@@ -1590,8 +1616,8 @@ func isBodylessStatus(status int) bool {
 	}
 }
 
-func writeResponder(w http.ResponseWriter, req *http.Request, responder Responder, produces []string, headers http.Header, logger *slog.Logger) {
-	baseHeaders := w.Header().Clone()
+func writeResponder(w http.ResponseWriter, req *http.Request, responder Responder, produces compiledProduces, headers http.Header, logger *slog.Logger) {
+	baseHeaders := snapshotHeaders(w.Header())
 	applyHeaders(w.Header(), headers)
 	setNoSniffHeader(w.Header())
 
@@ -1664,16 +1690,37 @@ func operationID(method, pattern string) string {
 	return strings.Trim(strings.ToLower(method)+"-"+replacer.Replace(pattern), "-")
 }
 
-type operationContextKey struct{}
+type requestContextKey struct{}
+
+type requestContext struct {
+	context.Context
+	requestID string
+	operation *OperationMeta
+}
+
+func (c *requestContext) Value(key any) any {
+	if _, ok := key.(requestContextKey); ok {
+		return c
+	}
+	return c.Context.Value(key)
+}
+
+func requestContextFrom(ctx context.Context) *requestContext {
+	if ctx == nil {
+		return nil
+	}
+	state, _ := ctx.Value(requestContextKey{}).(*requestContext)
+	return state
+}
 
 // OperationFromContext returns read-only metadata for the matched route. The
 // router attaches it before application middleware runs.
 func OperationFromContext(ctx context.Context) (OperationMeta, bool) {
-	meta, ok := ctx.Value(operationContextKey{}).(*OperationMeta)
-	if !ok || meta == nil {
+	state := requestContextFrom(ctx)
+	if state == nil || state.operation == nil {
 		return OperationMeta{}, false
 	}
-	return *meta, true
+	return *state.operation, true
 }
 
 func inputPermissions(t reflect.Type) []string {

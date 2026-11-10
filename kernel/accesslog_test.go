@@ -77,6 +77,31 @@ func TestAccessLogWithConfigLevel(t *testing.T) {
 	}
 }
 
+func TestAccessLogWithConfigDisabledLevelSkipsRequestSnapshot(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	skipCalled := false
+	extraCalled := false
+	handler := AccessLogWithConfig(logger, AccessLogConfig{
+		Level: slog.LevelInfo,
+		Skip: func(AccessLogInfo) bool {
+			skipCalled = true
+			return false
+		},
+		ExtraAttrs: func(AccessLogInfo) []slog.Attr {
+			extraCalled = true
+			return nil
+		},
+	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/filtered", nil))
+	if logs.Len() != 0 || skipCalled || extraCalled {
+		t.Fatalf("filtered access log did work: logs=%q skip=%v extra=%v", logs.String(), skipCalled, extraCalled)
+	}
+}
+
 func TestAccessLogWithConfigSkipPathsAreExactAndIgnoreQuery(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
@@ -94,6 +119,27 @@ func TestAccessLogWithConfigSkipPathsAreExactAndIgnoreQuery(t *testing.T) {
 	}
 	if entries[0]["path"] != "/skip/more" || entries[1]["path"] != "/keep" {
 		t.Fatalf("logged paths = %v, %v", entries[0]["path"], entries[1]["path"])
+	}
+}
+
+func TestAccessLogWithConfigSkipPathsUseFinalPath(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	handler := AccessLogWithConfig(logger, AccessLogConfig{SkipPaths: []string{"/initial", "/final"}})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/initial":
+			r.URL.Path = "/kept"
+		case "/kept":
+			r.URL.Path = "/final"
+		}
+	}))
+
+	for _, path := range []string{"/initial", "/kept"} {
+		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+	entries := accessLogEntries(t, logs.Bytes())
+	if len(entries) != 1 || entries[0]["path"] != "/kept" {
+		t.Fatalf("entries = %#v", entries)
 	}
 }
 

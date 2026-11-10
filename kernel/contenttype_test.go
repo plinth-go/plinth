@@ -79,7 +79,7 @@ func TestTypedResponderGuardPreservesReaderFrom(t *testing.T) {
 	guard := &contentTypeGuard{
 		w:        underlying,
 		req:      httptest.NewRequest(http.MethodGet, "/file", nil),
-		produces: []string{"text/plain"},
+		produces: compileProduces([]string{"text/plain"}),
 	}
 	n, err := guard.ReadFrom(io.LimitReader(strings.NewReader("hello"), 5))
 	if err != nil {
@@ -109,7 +109,7 @@ func TestTypedResponderGuardPropagatesFlushError(t *testing.T) {
 	guard := &contentTypeGuard{
 		w:        underlying,
 		req:      httptest.NewRequest(http.MethodGet, "/stream", nil),
-		produces: []string{"text/plain"},
+		produces: compileProduces([]string{"text/plain"}),
 	}
 	err := guard.FlushError()
 	if err == nil || !strings.Contains(err.Error(), "client disconnected") {

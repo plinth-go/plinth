@@ -305,10 +305,14 @@ func opsOptions(opts []Option, logAccess bool) []Option {
 	return append(combined, Hidden())
 }
 
+var livezJSON = []byte("{\"status\":\"ok\"}\n")
+
 // Livez reports process liveness without touching dependencies.
 func Livez(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	_ = WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	setJSONHeaders(w.Header())
+	w.WriteHeader(http.StatusOK)
+	_ = writeBody(w, livezJSON)
 }
 
 // Readyz evaluates every configured dependency. A failed check returns HTTP
@@ -398,7 +402,7 @@ func (r *Router) OpenAPIHandler() http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusOK)
-		if err := writeBody(w, r.OpenAPIJSON()); err != nil {
+		if err := writeBody(w, r.openAPIDocument()); err != nil {
 			r.logger.Error("write OpenAPI response", "error", err)
 		}
 	}

@@ -678,6 +678,36 @@ func TestOperationMetadataReachesMiddleware(t *testing.T) {
 	}
 }
 
+type nestedOperationInput struct {
+	Meta `route:"GET /nested"`
+}
+
+func TestNestedRouterOperationScopeIsRestored(t *testing.T) {
+	var innerOperation, outerBefore, outerAfter OperationMeta
+	inner := NewRouter(nil, "inner", "1")
+	inner.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			innerOperation, _ = OperationFromContext(r.Context())
+			next.ServeHTTP(w, r)
+		})
+	})
+	inner.Handle(func(context.Context, nestedOperationInput) (struct{}, error) { return struct{}{}, nil })
+
+	outer := NewRouter(nil, "outer", "1")
+	outer.Raw(http.MethodGet, "/outer", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		outerBefore, _ = OperationFromContext(r.Context())
+		nested := r.Clone(r.Context())
+		nested.URL.Path = "/nested"
+		inner.ServeHTTP(w, nested)
+		outerAfter, _ = OperationFromContext(r.Context())
+	}))
+	outer.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/outer", nil))
+
+	if innerOperation.Path != "/nested" || outerBefore.Path != "/outer" || outerAfter.Path != "/outer" {
+		t.Fatalf("inner = %#v, outer before = %#v, outer after = %#v", innerOperation, outerBefore, outerAfter)
+	}
+}
+
 type authzTagInput struct {
 	Meta `route:"GET /authz" authz:"links:read, links:write,links:read"`
 }
