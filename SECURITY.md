@@ -40,6 +40,10 @@ Plinth 是应用内核，不是托管服务，也不是完整的访问控制产�
 - `platform/session` 固定 session cookie 为 `HttpOnly`，在 store 中只保存 hash 后的
   token；`SameSite=None` 和 Partitioned cookie 都要求 `Secure`。多实例必须使用共享
   store，进程内 store 只适合单实例和测试。
+- 核心包和框架提供的可选包都不 import `net/http/pprof`。该标准库包在 init 阶段向
+  `http.DefaultServeMux` 注册 endpoint，无法由 wrapper 隔离；因此 Plinth 不提供
+  pprof 公共包或自动调试端口。应用必须显式决定是否引入，并自行负责 loopback/端口
+  转发、认证、网络策略以及同一进程内其他 `DefaultServeMux` 使用方的审计。
 
 ## 应用或网关负责的控制
 

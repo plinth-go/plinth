@@ -31,6 +31,7 @@ AI 或新维护者不需要跨仓库拼接上下文，也不会把参考应用�
 | 只接入限流（内存/Redis） | [ratelimit.md](ratelimit.md) |
 | 只接入 Session / Cookie | [session.md](session.md) |
 | 安全中间件组合顺序 | [security.md](security.md) |
+| 独立 listener 采集 pprof 与查看火焰图 | [pprof.md](pprof.md) |
 | 使用者如何测试自己的业务 handler 和中间件接线 | [testing.md](testing.md) |
 | Postgres、Redis、jobs、对象存储等 opt-in 能力 | [optional-platform.md](optional-platform.md) |
 

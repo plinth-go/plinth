@@ -16,6 +16,7 @@
 - [CORS](examples/cors.md): explicit origin allowlist around the router.
 - [Rate limits](examples/ratelimit.md): memory and Redis fixed-window middleware.
 - [Sessions](examples/session.md): cookie-backed sessions and login/logout.
+- [pprof and flame graphs](examples/pprof.md): process-wide CPU, heap, and goroutine profiles on a dedicated listener.
 - [Security order](examples/security.md): middleware composition only.
 - [Testing](examples/testing.md): testing application business logic with the real router.
 - [Optional platform](examples/optional-platform.md): Postgres, Redis, database-neutral jobs/migrations with adapters, object storage.
@@ -26,6 +27,7 @@
 - Add CORS: [examples/cors.md](examples/cors.md)
 - Add rate limiting: [examples/ratelimit.md](examples/ratelimit.md)
 - Add sessions/cookies: [examples/session.md](examples/session.md)
+- Add runtime profiling: [examples/pprof.md](examples/pprof.md)
 - Add JWT + DB permissions: [examples/jwt-postgres-authz.md](examples/jwt-postgres-authz.md)
 - Add permission tags only: [examples/authz.md](examples/authz.md)
 - Decide middleware order: [examples/security.md](examples/security.md)

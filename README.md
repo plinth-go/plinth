@@ -377,6 +377,7 @@ internal/generated/     go generate 产物，不手改
 | 幂等 | 内存或 Redis | `platform/idempotency` | 请求指纹、pending/complete 回放 |
 | 对象存储 | 应用选择 | `platform/objectstore`、`localfs`、`s3store` | key 校验、原子本地写入、S3 适配 |
 | 可观测性 | Prometheus/OTel | `platform/observability/*` | HTTP 指标与 server span 适配 |
+| 性能剖析 | 标准库 `net/http/pprof` | 无（应用显式引入） | 不内置 pprof，避免修改 `http.DefaultServeMux` |
 | 上传 | 标准库 `mime/multipart` | `kernel/uploads` | 流式解析、大小限制、临时文件清理 |
 | Slug | 内置规则 + `gosimple/unidecode` | `kernel` | tag 解析、音译与绑定阶段触发 |
 | 配置 | `sethvargo/go-envconfig/v2` | `app` | 强类型 struct 与边界校验 |
@@ -1504,6 +1505,13 @@ Partitioned cookie 都要求 `Secure`。默认使用持久 cookie，`NoPersist` 
 流式与升级接口，且可以同时挂在同一 router 上。`jobs.Observer` 是 jobs 包的
 backend-neutral 钩子，供应用把 worker attempt 和 scheduler scan 接到自己的 metrics
 或 tracing 实现，不需要 jobs 反向依赖 Prometheus/OTel。
+
+Plinth 不内置 pprof 公共包或自动调试端口。`net/http/pprof` 在 import 的 init 阶段向
+`http.DefaultServeMux` 注册 handler，任何 wrapper 都无法消除这个全局副作用；核心包
+和框架可选包也由依赖测试禁止引入它。CPU、堆、goroutine、mutex 和 block profile 都是
+进程级采样，同一进程内的业务 HTTP、管理 HTTP、worker 和 scheduler 都会进入样本；
+请求时延和按 route 的拆分仍应使用指标、tracing 和 access log。应用显式启用、build
+tag 隔离、端口转发与火焰图命令见 [`examples/pprof.md`](examples/pprof.md)。
 
 ### 迁移与 dead-letter 运维
 
