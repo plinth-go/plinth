@@ -439,6 +439,39 @@ typed 的 `route` tag 和 `Raw` 的 method 必须是规范的大写 HTTP token�
 panic 被外层恢复时，它记录的 `bytes` 只包含自己已经观察到的写入（通常为 0），
 无法包含随后写出的 Problem 体，也无法观察最终 header。
 
+`AccessLog(logger)` 保持默认记录：message 为 `http request`、级别为 Info，并依次
+包含 `request_id`、`method`、`path`、`status`、`bytes`、`duration`；panic 时再追加
+`panic`。需要调整级别、跳过请求或附加字段时使用 `AccessLogWithConfig`：
+
+```go
+router.Use(
+    kernel.RequestID(),
+    kernel.AccessLogWithConfig(logger, kernel.AccessLogConfig{
+        Level:     slog.LevelWarn,
+        SkipPaths: []string{"/livez", "/readyz"},
+        Skip: func(info kernel.AccessLogInfo) bool {
+            return info.Status < 400 && info.Operation.OperationID == "health"
+        },
+        ExtraAttrs: func(info kernel.AccessLogInfo) []slog.Attr {
+            return []slog.Attr{slog.String("tenant", info.Request.Header.Get("X-Tenant"))}
+        },
+    }),
+    kernel.Recover(logger),
+    kernel.BodyLimit(1<<20),
+)
+```
+
+`SkipPaths` 只按 `r.URL.Path` 精确匹配，忽略 query，不做 glob 或隐式前缀匹配；
+前缀、状态码、租户等动态条件应放在 `Skip` 中，不要滥用 `SkipPaths`。`Skip` 在请求
+处理完成、拿到最终 status/bytes/duration 后调用；`ExtraAttrs` 只在最终确认记录时
+调用，并与 `Skip` 使用同一份请求快照，返回字段追加在基础字段之后。
+
+路由可以用 `kernel.SkipAccessLog()` 声明式跳过访问日志，Group 可以用
+`group.SkipAccessLog()` 覆盖当前 Group、子 Group 和该 Group 注册的 Ops。Group 只
+继承声明式策略，不维护路径列表；`Hidden()` 只控制 OpenAPI 是否展示，不会自动跳过
+访问日志。未匹配的 404 没有 `OperationMeta`，仍按 `SkipPaths`、`Skip` 等普通规则
+处理。
+
 中间件会转发 `100..199` 的 informational response，但不会把它当成最终状态；
 `101 Switching Protocols` 例外，它本身就是最终响应。因此 103 Early Hints 之后的
 201/500 仍会正常写出，AccessLog 记录最终状态与字节数，Recover 也能在 103 后写入 500。
@@ -673,6 +706,11 @@ router.RegisterOps(cfg.Ops.Apply(kernel.OpsConfig{
 `/docs/`，通过 `OPS_LIVENESS_PATH`、`OPS_READINESS_PATH`、`OPS_OPENAPI_PATH` 和
 `OPS_DOCS_PATH` 修改。`Apply` 会用非空 settings 路径覆盖 `OpsConfig` 中的对应路径；
 如果完全用代码注册、不走 `OpsSettings`，仍可直接设置 `OpsConfig` 的路径字段。
+
+Ops 端点默认不记录访问日志。设置 `OpsConfig.LogAccess=true`（或环境变量
+`OPS_ACCESS_LOG_ENABLED=true`）后，它们仍受 `SkipPaths`、`Skip` 和
+`Group.SkipAccessLog` 约束；Group 的声明式跳过优先级最高。`Ready`/`Live` handler
+自身写出的错误日志不受访问日志开关影响。
 
 需要自定义路径或响应时，覆盖配置项即可：
 
@@ -1163,8 +1201,9 @@ type Config struct {
 根前缀之外的层级只用 segment。
 
 框架自身的通用配置以可嵌入片段提供。`kernel.OpsSettings` 的 `Ops` 字段自动得到
-`OPS_` segment，生成启用开关和四个路径变量，默认全部启用。它只包含跨应用稳定的
-env，`Checks`、`Logger` 和自定义 handler 等运行时依赖仍属于 `kernel.OpsConfig`：
+`OPS_` segment，生成启用开关、四个路径变量和访问日志开关，默认注册全部端点且
+不记录 Ops 访问日志。它只包含跨应用稳定的 env，`Checks`、`Logger` 和自定义 handler
+等运行时依赖仍属于 `kernel.OpsConfig`：
 
 ```go
 router.RegisterOps(cfg.Ops.Apply(kernel.OpsConfig{
@@ -1173,7 +1212,8 @@ router.RegisterOps(cfg.Ops.Apply(kernel.OpsConfig{
 }))
 ```
 
-`OpsSettings.Apply` 只派生注册开关和路径，不修改传入的 `OpsConfig`。直接使用
+`OpsSettings.Apply` 只派生注册开关、路径和 `LogAccess`，不修改传入的
+`OpsConfig`。直接使用
 `OpsConfig` 时其零值仍表示全部端点启用；`OpsSettings` 的零值则因为使用正向布尔值而
 表示全部关闭，因此应用配置应通过 env loader（缺省值即启用）或
 `kernel.DefaultOpsSettings()`。这是有意的边界：环境配置使用正向 `Enable`，运行时
@@ -1230,6 +1270,7 @@ key 必须是合法的 shell 变量名，生成值在需要时会被 shell 单�
 | `OPS_OPENAPI_ENABLED` | `true` | 注册 `/openapi.json` 和 `/docs/` |
 | `OPS_OPENAPI_PATH` | `/openapi.json` | OpenAPI JSON 路径 |
 | `OPS_DOCS_PATH` | `/docs/` | Swagger UI 路径 |
+| `OPS_ACCESS_LOG_ENABLED` | `false` | 记录 Ops 端点访问日志 |
 | `WORKER_CONCURRENCY` | `4` | 并发 worker 数 |
 | `WORKER_POLL_INTERVAL` | `500ms` | 空闲领取间隔 |
 | `WORKER_TIMEOUT` | `30s` | 单次任务执行上限 |

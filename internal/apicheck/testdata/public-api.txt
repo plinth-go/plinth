@@ -32,6 +32,7 @@ func (g *Group) Handle[In, Out any](h Handler[In, Out], opts ...Option)
 func (g *Group) Prefix() string
 func (g *Group) Raw(method, pattern string, h http.Handler, opts ...Option)
 func (g *Group) RegisterOps(cfg OpsConfig)
+func (g *Group) SkipAccessLog() *Group
 func (g *Group) Tag(tags ...string) *Group
 func (g *Group) Use(mw ...Middleware)
 func (h Headers) ResponseHeaders() http.Header
@@ -57,6 +58,7 @@ func (s *SSE) Comment(text string) error
 func (s *SSE) Event(name string, value any) error
 func (s OpsSettings) Apply(cfg OpsConfig) OpsConfig
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler
+func AccessLogWithConfig(logger *slog.Logger, cfg AccessLogConfig) func(http.Handler) http.Handler
 func BadRequest(detail string) error
 func BodyLimit(maxBytes int64) func(http.Handler) http.Handler
 func Conflict(detail string) error
@@ -80,6 +82,7 @@ func RequestID() func(http.Handler) http.Handler
 func RequestIDFromContext(ctx context.Context) string
 func RequirePermissions(permissions ...string) Option
 func SetHeaders(w http.ResponseWriter, headers http.Header) error
+func SkipAccessLog() Option
 func Status(code int) Option
 func Summary(s string) Option
 func Tags(tags ...string) Option
@@ -93,6 +96,27 @@ func WriteCSVTo(dst io.Writer, header []string, rows func(yield func([]string) e
 func WriteFile(w http.ResponseWriter, r *http.Request, path, downloadName string) error
 func WriteJSON(w http.ResponseWriter, status int, value any) error
 func WriteProblem(w http.ResponseWriter, r *http.Request, err error, logf func(string, ...any))
+type AccessLogConfig struct {
+	Level slog.Level
+
+	SkipPaths []string
+
+	Skip func(AccessLogInfo) bool
+
+	ExtraAttrs func(AccessLogInfo) []slog.Attr
+}
+type AccessLogInfo struct {
+	Request      *http.Request
+	RequestID    string
+	Method       string
+	Path         string
+	Status       int
+	Bytes        int
+	Duration     time.Duration
+	Panic        any
+	Operation    OperationMeta
+	HasOperation bool
+}
 type Attachment struct {
 	Filename    string
 	ContentType string
@@ -125,12 +149,13 @@ type FieldError struct {
 	Message  string `json:"message"`
 }
 type Group struct {
-	router     *Router
-	parent     *Group
-	prefix     string
-	middleware []Middleware
-	tags       []string
-	frozen     bool
+	router        *Router
+	parent        *Group
+	prefix        string
+	middleware    []Middleware
+	tags          []string
+	skipAccessLog bool
+	frozen        bool
 }
 type HTTPError struct {
 	Status int
@@ -160,14 +185,16 @@ type OperationMeta struct {
 	Status              int
 	NoContent           bool
 	Hidden              bool
-	Produces            []string
-	Params              []ParamMeta
-	Body                *BodyMeta
-	ResponseSchema      map[string]any
-	raw                 bool
-	responder           bool
-	inputType           reflect.Type
-	defaults            []defaultCheck
+
+	SkipAccessLog  bool
+	Produces       []string
+	Params         []ParamMeta
+	Body           *BodyMeta
+	ResponseSchema map[string]any
+	raw            bool
+	responder      bool
+	inputType      reflect.Type
+	defaults       []defaultCheck
 }
 type OpsConfig struct {
 	LivePath    string
@@ -187,6 +214,8 @@ type OpsConfig struct {
 	Ready   http.HandlerFunc
 	OpenAPI http.HandlerFunc
 	Docs    http.Handler
+
+	LogAccess bool
 }
 type OpsSettings struct {
 	LivenessEnabled bool `env:"LIVENESS_ENABLED,default=true" envdoc:"Register the liveness endpoint."`
@@ -202,6 +231,8 @@ type OpsSettings struct {
 	OpenAPIPath string `env:"OPENAPI_PATH,default=/openapi.json" envdoc:"OpenAPI document path." validate:"startswith=/"`
 
 	DocsPath string `env:"DOCS_PATH,default=/docs/" envdoc:"Swagger UI path; a trailing slash is added when omitted." validate:"startswith=/"`
+
+	AccessLogEnabled bool `env:"ACCESS_LOG_ENABLED,default=false" envdoc:"Log operational endpoint requests in the access log."`
 }
 type Option func(*OperationMeta)
 type ParamMeta struct {

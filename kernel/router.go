@@ -138,14 +138,17 @@ type OperationMeta struct {
 	Status              int
 	NoContent           bool
 	Hidden              bool
-	Produces            []string
-	Params              []ParamMeta
-	Body                *BodyMeta
-	ResponseSchema      map[string]any
-	raw                 bool
-	responder           bool
-	inputType           reflect.Type
-	defaults            []defaultCheck
+	// SkipAccessLog excludes matched requests from AccessLogWithConfig records.
+	// It is independent of Hidden, which only controls OpenAPI visibility.
+	SkipAccessLog  bool
+	Produces       []string
+	Params         []ParamMeta
+	Body           *BodyMeta
+	ResponseSchema map[string]any
+	raw            bool
+	responder      bool
+	inputType      reflect.Type
+	defaults       []defaultCheck
 }
 
 type defaultCheck struct {
@@ -235,12 +238,13 @@ func (r *Router) Use(mw ...Middleware) {
 }
 
 type Group struct {
-	router     *Router
-	parent     *Group
-	prefix     string
-	middleware []Middleware
-	tags       []string
-	frozen     bool
+	router        *Router
+	parent        *Group
+	prefix        string
+	middleware    []Middleware
+	tags          []string
+	skipAccessLog bool
+	frozen        bool
 }
 
 func (r *Router) Group(prefix string, mw ...Middleware) *Group {
@@ -288,6 +292,17 @@ func (g *Group) Tag(tags ...string) *Group {
 	return g
 }
 
+// SkipAccessLog marks routes registered directly on this group, on descendant
+// groups, and through RegisterOps as excluded from AccessLogWithConfig records.
+// It must be called before those routes are registered.
+func (g *Group) SkipAccessLog() *Group {
+	if g.frozen {
+		panic("kernel: Group.SkipAccessLog must be called before registering routes on this group or its children")
+	}
+	g.skipAccessLog = true
+	return g
+}
+
 func (g *Group) Prefix() string {
 	if g.prefix == "" {
 		return "/"
@@ -313,12 +328,27 @@ func (g *Group) tagList() []string {
 
 func (g *Group) options(opts []Option) []Option {
 	tags := g.tagList()
-	if len(tags) == 0 {
+	skipAccessLog := g.skipsAccessLog()
+	if len(tags) == 0 && !skipAccessLog {
 		return opts
 	}
-	combined := make([]Option, 0, len(opts)+1)
-	combined = append(combined, Tags(tags...))
+	combined := make([]Option, 0, len(opts)+2)
+	if len(tags) > 0 {
+		combined = append(combined, Tags(tags...))
+	}
+	if skipAccessLog {
+		combined = append(combined, SkipAccessLog())
+	}
 	return append(combined, opts...)
+}
+
+func (g *Group) skipsAccessLog() bool {
+	for current := g; current != nil; current = current.parent {
+		if current.skipAccessLog {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -655,6 +685,11 @@ func Tags(tags ...string) Option  { return func(m *OperationMeta) { m.Tags = app
 func Status(code int) Option      { return func(m *OperationMeta) { m.Status = code } }
 func OperationID(s string) Option { return func(m *OperationMeta) { m.OperationID = s } }
 func Hidden() Option              { return func(m *OperationMeta) { m.Hidden = true } }
+
+// SkipAccessLog marks the route as excluded from AccessLogWithConfig records.
+// Group.SkipAccessLog applies the same policy to every route in a group.
+func SkipAccessLog() Option { return func(m *OperationMeta) { m.SkipAccessLog = true } }
+
 func RequirePermissions(permissions ...string) Option {
 	normalized := normalizePermissions(permissions, "kernel.RequirePermissions")
 	return func(m *OperationMeta) { m.RequiredPermissions = append([]string(nil), normalized...) }

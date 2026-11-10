@@ -49,6 +49,8 @@ type OpsSettings struct {
 	OpenAPIPath string `env:"OPENAPI_PATH,default=/openapi.json" envdoc:"OpenAPI document path." validate:"startswith=/"`
 	// DocsPath is the Swagger UI path. A trailing slash is added if omitted.
 	DocsPath string `env:"DOCS_PATH,default=/docs/" envdoc:"Swagger UI path; a trailing slash is added when omitted." validate:"startswith=/"`
+	// AccessLogEnabled records operational endpoint requests in the access log.
+	AccessLogEnabled bool `env:"ACCESS_LOG_ENABLED,default=false" envdoc:"Log operational endpoint requests in the access log."`
 }
 
 // DefaultOpsSettings returns settings with every standard operational endpoint
@@ -62,6 +64,7 @@ func DefaultOpsSettings() OpsSettings {
 		OpenAPIEnabled:   true,
 		OpenAPIPath:      "/openapi.json",
 		DocsPath:         "/docs/",
+		AccessLogEnabled: false,
 	}
 }
 
@@ -75,6 +78,7 @@ func (s OpsSettings) Apply(cfg OpsConfig) OpsConfig {
 	cfg.DisableLive = !s.LivenessEnabled
 	cfg.DisableReady = !s.ReadinessEnabled
 	cfg.DisableOpenAPI = !s.OpenAPIEnabled
+	cfg.LogAccess = s.AccessLogEnabled
 	if s.LivenessPath != "" {
 		cfg.LivePath = s.LivenessPath
 	}
@@ -116,6 +120,10 @@ type OpsConfig struct {
 	Ready   http.HandlerFunc
 	OpenAPI http.HandlerFunc
 	Docs    http.Handler
+
+	// LogAccess enables access-log records for operational endpoints. The zero
+	// value suppresses them. Group.SkipAccessLog still takes precedence.
+	LogAccess bool
 }
 
 // RegisterOps registers the enabled standard operational routes.
@@ -170,20 +178,20 @@ func (r *Router) registerOps(prefix string, mw []Middleware, opts []Option, cfg 
 	}
 
 	if !cfg.DisableLive {
-		r.raw(prefix, mw, http.MethodGet, cfg.LivePath, noStore(live), opsOptions(opts)...)
+		r.raw(prefix, mw, http.MethodGet, cfg.LivePath, noStore(live), opsOptions(opts, cfg.LogAccess)...)
 	}
 	if !cfg.DisableReady {
-		r.raw(prefix, mw, http.MethodGet, cfg.ReadyPath, noStore(ready), opsOptions(opts)...)
+		r.raw(prefix, mw, http.MethodGet, cfg.ReadyPath, noStore(ready), opsOptions(opts, cfg.LogAccess)...)
 	}
 	if !cfg.DisableOpenAPI {
-		r.raw(prefix, mw, http.MethodGet, cfg.OpenAPIPath, noStore(openapi), opsOptions(opts)...)
+		r.raw(prefix, mw, http.MethodGet, cfg.OpenAPIPath, noStore(openapi), opsOptions(opts, cfg.LogAccess)...)
 		docs := cfg.Docs
 		if docs == nil {
 			specURL := joinRoute(prefix, cfg.OpenAPIPath)
 			docsURL := joinRoute(prefix, cfg.DocsPath)
 			docs = v5emb.New(r.title, specURL, docsURL)
 		}
-		r.raw(prefix, mw, http.MethodGet, cfg.DocsPath, noStore(docs), opsOptions(opts)...)
+		r.raw(prefix, mw, http.MethodGet, cfg.DocsPath, noStore(docs), opsOptions(opts, cfg.LogAccess)...)
 	}
 }
 
@@ -289,8 +297,11 @@ func (w *opsResponseWriter) ReadFrom(src io.Reader) (int64, error) {
 	return io.Copy(struct{ io.Writer }{w}, src)
 }
 
-func opsOptions(opts []Option) []Option {
+func opsOptions(opts []Option, logAccess bool) []Option {
 	combined := append([]Option(nil), opts...)
+	if !logAccess {
+		combined = append(combined, SkipAccessLog())
+	}
 	return append(combined, Hidden())
 }
 

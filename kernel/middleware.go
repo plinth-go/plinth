@@ -98,12 +98,61 @@ func Recover(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// AccessLogConfig configures AccessLogWithConfig. Its zero value preserves the
+// default access-log behavior: info level, no skip rules, and no extra fields.
+type AccessLogConfig struct {
+	// Level is the level used for recorded requests. The zero value is
+	// slog.LevelInfo.
+	Level slog.Level
+	// SkipPaths omits requests whose r.URL.Path exactly matches one of these
+	// values. Query strings are ignored and no prefix or glob matching is
+	// performed. Use Skip for dynamic rules.
+	SkipPaths []string
+	// Skip is called after the response with the final status, byte count,
+	// duration, and matched operation metadata. Returning true omits the
+	// access-log record.
+	Skip func(AccessLogInfo) bool
+	// ExtraAttrs is called only for requests that will be logged and returns
+	// fields appended after the standard access-log fields.
+	ExtraAttrs func(AccessLogInfo) []slog.Attr
+}
+
+// AccessLogInfo is the request snapshot shared by Skip and ExtraAttrs for one
+// completed request. HasOperation reports whether Operation was attached by the
+// router before application middleware ran.
+type AccessLogInfo struct {
+	Request      *http.Request
+	RequestID    string
+	Method       string
+	Path         string
+	Status       int
+	Bytes        int
+	Duration     time.Duration
+	Panic        any
+	Operation    OperationMeta
+	HasOperation bool
+}
+
 // AccessLog records the method, path, status, bytes written, and duration of a
 // request. For an accurate status and byte count after a recovered panic, wrap
 // Recover inside AccessLog; in the opposite order the inner access log cannot
 // observe the response written by the outer recovery.
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
+	return AccessLogWithConfig(logger, AccessLogConfig{})
+}
+
+// AccessLogWithConfig records requests using cfg. SkipPaths is compiled once
+// when the middleware is constructed, and both Skip and ExtraAttrs receive the
+// same final request snapshot. A nil logger falls back to slog.Default().
+func AccessLogWithConfig(logger *slog.Logger, cfg AccessLogConfig) func(http.Handler) http.Handler {
 	logger = utils.IfNilElse(logger, slog.Default())
+	var skipPaths map[string]struct{}
+	if len(cfg.SkipPaths) > 0 {
+		skipPaths = make(map[string]struct{}, len(cfg.SkipPaths))
+		for _, path := range cfg.SkipPaths {
+			skipPaths[path] = struct{}{}
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -115,29 +164,40 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 					status = http.StatusInternalServerError
 				}
 				ctx := r.Context()
-				requestID := RequestIDFromContext(ctx)
 				duration := time.Since(start)
-				if recovered != nil {
-					logger.LogAttrs(ctx, slog.LevelInfo, "http request",
-						slog.String("request_id", requestID),
-						slog.String("method", r.Method),
-						slog.String("path", r.URL.Path),
-						slog.Int("status", status),
-						slog.Int("bytes", sw.bytes),
-						slog.Duration("duration", duration),
-						slog.String("panic", fmt.Sprint(recovered)),
-					)
-				} else {
-					logger.LogAttrs(ctx, slog.LevelInfo, "http request",
-						slog.String("request_id", requestID),
-						slog.String("method", r.Method),
-						slog.String("path", r.URL.Path),
-						slog.Int("status", status),
-						slog.Int("bytes", sw.bytes),
-						slog.Duration("duration", duration),
-					)
+				operation, hasOperation := OperationFromContext(ctx)
+				info := AccessLogInfo{
+					Request:      r,
+					RequestID:    RequestIDFromContext(ctx),
+					Method:       r.Method,
+					Path:         r.URL.Path,
+					Status:       status,
+					Bytes:        sw.bytes,
+					Duration:     duration,
+					Panic:        recovered,
+					Operation:    operation,
+					HasOperation: hasOperation,
 				}
 				releaseStatusWriter(sw)
+
+				record := true
+				if skipPaths != nil {
+					_, skipped := skipPaths[info.Path]
+					record = !skipped
+				}
+				if record && info.HasOperation && info.Operation.SkipAccessLog {
+					record = false
+				}
+				if record && cfg.Skip != nil && cfg.Skip(info) {
+					record = false
+				}
+				if record {
+					var extra []slog.Attr
+					if cfg.ExtraAttrs != nil {
+						extra = cfg.ExtraAttrs(info)
+					}
+					logHTTPRequest(ctx, logger, cfg.Level, info, extra)
+				}
 				if recovered != nil {
 					panic(recovered)
 				}
@@ -145,6 +205,47 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(sw, r)
 		})
 	}
+}
+
+func logHTTPRequest(ctx context.Context, logger *slog.Logger, level slog.Level, info AccessLogInfo, extra []slog.Attr) {
+	if len(extra) == 0 {
+		if info.Panic != nil {
+			logger.LogAttrs(ctx, level, "http request",
+				slog.String("request_id", info.RequestID),
+				slog.String("method", info.Method),
+				slog.String("path", info.Path),
+				slog.Int("status", info.Status),
+				slog.Int("bytes", info.Bytes),
+				slog.Duration("duration", info.Duration),
+				slog.String("panic", fmt.Sprint(info.Panic)),
+			)
+			return
+		}
+		logger.LogAttrs(ctx, level, "http request",
+			slog.String("request_id", info.RequestID),
+			slog.String("method", info.Method),
+			slog.String("path", info.Path),
+			slog.Int("status", info.Status),
+			slog.Int("bytes", info.Bytes),
+			slog.Duration("duration", info.Duration),
+		)
+		return
+	}
+
+	attrs := make([]slog.Attr, 0, 7+len(extra))
+	attrs = append(attrs,
+		slog.String("request_id", info.RequestID),
+		slog.String("method", info.Method),
+		slog.String("path", info.Path),
+		slog.Int("status", info.Status),
+		slog.Int("bytes", info.Bytes),
+		slog.Duration("duration", info.Duration),
+	)
+	if info.Panic != nil {
+		attrs = append(attrs, slog.String("panic", fmt.Sprint(info.Panic)))
+	}
+	attrs = append(attrs, extra...)
+	logger.LogAttrs(ctx, level, "http request", attrs...)
 }
 
 func BodyLimit(maxBytes int64) func(http.Handler) http.Handler {
