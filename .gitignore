@@ -6,8 +6,7 @@
 .mcp.json
 .mcp.local.json
 
-# Local-only agent, handoff, and maintainer notes
-AGENTS.md
+# Local-only personal agent, handoff, and maintainer notes
 AGENTS.override.md
 HANDOFF.md
 HANDOFF.*.md

@@ -13,9 +13,12 @@ BENCH_BASE ?= bench-results/baseline.txt
 BENCH_NEW ?= bench-results/bench.txt
 BENCHSTAT_VERSION ?= v0.0.0-20261009192801-be2c69fb417e
 
-.PHONY: all generate fmt docscheck golden check dco-check test vet build bench bench-compare fuzz fuzz-extended api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
+.PHONY: all hooks generate fmt docscheck golden check dco-check test vet build bench bench-compare fuzz fuzz-extended api-check api-update race license-check license-update lint-workflows vulncheck release-check run clean
 
 all: generate fmt check test vet build
+
+hooks:
+	git config --local core.hooksPath .githooks
 
 generate:
 	$(GO) generate ./...

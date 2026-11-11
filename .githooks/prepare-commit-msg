@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+set -eu
+
+message_file=${1:?missing commit message file}
+source=${2:-}
+
+# Merge commits are exempt from the DCO check.
+if [ "$source" = "merge" ]; then
+	exit 0
+fi
+
+ident=$(git var GIT_AUTHOR_IDENT)
+signoff=$(printf '%s\n' "$ident" | sed 's/ [0-9][0-9]* [+-][0-9][0-9]*$//')
+
+if grep -Fqx "Signed-off-by: ${signoff}" "$message_file"; then
+	exit 0
+fi
+
+if [ -s "$message_file" ] && [ -n "$(tail -c 1 "$message_file")" ]; then
+	printf '\n' >>"$message_file"
+fi
+printf '\nSigned-off-by: %s\n' "$signoff" >>"$message_file"

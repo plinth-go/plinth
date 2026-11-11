@@ -5,6 +5,7 @@
 ## Start here
 
 - [README](README.md): authoritative API and deployment reference.
+- [README (简体中文)](README.zh-CN.md): Chinese translation of the project, feature, example, and contribution overview.
 - [Examples index](examples/README.md): documentation-only recipes plus runnable quickstart and deployment examples.
 - [Runnable quickstart](examples/hello): dependency-free hello endpoint covered by `go test ./...`.
 - [TLS and HTTP/2](examples/tls-http2): runnable in-process TLS/HTTP2 and reverse-proxy listener comparison.
@@ -35,6 +36,7 @@
 ## Contracts
 
 - [Contributor guide](CONTRIBUTING.md): architecture, dependency, configuration, and testing rules.
+- [Agent guide](AGENTS.md): committed project-wide AI instructions; personal overrides live in the gitignored `AGENTS.override.md`.
 - [Security boundary](SECURITY.md): framework-owned controls versus application/gateway responsibilities.
 - [Changelog](CHANGELOG.md): current release and development history.
 - [Public API snapshot](internal/apicheck/testdata/public-api.txt): exported declarations reviewed before release.
