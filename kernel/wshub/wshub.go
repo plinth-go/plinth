@@ -119,7 +119,9 @@ func (h *Hub) writeControl(conn *gorilla.Conn, code int, reason string) {
 	deadline := time.Now().Add(time.Second)
 	if err := conn.WriteControl(gorilla.CloseMessage,
 		gorilla.FormatCloseMessage(code, reason), deadline); err != nil {
-		h.logger.Debug("websocket close control", "error", err)
+		if !errors.Is(err, gorilla.ErrCloseSent) {
+			h.logger.Debug("websocket close control", "error", err)
+		}
 	}
 }
 
@@ -159,7 +161,11 @@ func NormalizeError(err error) error {
 	if isNilInterface(err) {
 		return nil
 	}
-	if gorilla.IsCloseError(err, gorilla.CloseNormalClosure, gorilla.CloseGoingAway) {
+	if gorilla.IsCloseError(err,
+		gorilla.CloseNormalClosure,
+		gorilla.CloseGoingAway,
+		gorilla.CloseNoStatusReceived,
+	) {
 		return nil
 	}
 	if errors.Is(err, context.Canceled) {

@@ -24,6 +24,7 @@ var optionalDependencies = []string{
 	"github.com/aws/smithy-go",
 	"github.com/prometheus/client_golang",
 	"go.opentelemetry.io/otel",
+	"net/http/pprof",
 }
 
 var optionalFrameworkPackages = []string{

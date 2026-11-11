@@ -1,6 +1,6 @@
 package api
 
-//go:generate go run ../../cmd/plinth-docgen -root ../.. -out ../generated/docs_gen.go
+//go:generate go run ../../cmd/plinth-docgen -root ../.. -include-file internal/api/docgen-packages.txt -out ../generated/docs_gen.go
 
 import (
 	"context"

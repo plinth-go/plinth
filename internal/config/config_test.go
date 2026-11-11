@@ -33,6 +33,9 @@ func TestLoad(t *testing.T) {
 	if cfg.Ops.LivenessPath != "/livez" || cfg.Ops.ReadinessPath != "/readyz" || cfg.Ops.OpenAPIPath != "/openapi.json" || cfg.Ops.DocsPath != "/docs/" {
 		t.Fatalf("Ops paths = %#v", cfg.Ops)
 	}
+	if cfg.Ops.AccessLogEnabled {
+		t.Fatalf("Ops access log enabled by default: %#v", cfg.Ops)
+	}
 	wantWorker := jobs.DefaultWorkerConfig()
 	wantWorker.Concurrency = 2
 	if cfg.Worker != wantWorker {

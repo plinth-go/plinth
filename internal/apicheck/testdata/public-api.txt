@@ -32,6 +32,7 @@ func (g *Group) Handle[In, Out any](h Handler[In, Out], opts ...Option)
 func (g *Group) Prefix() string
 func (g *Group) Raw(method, pattern string, h http.Handler, opts ...Option)
 func (g *Group) RegisterOps(cfg OpsConfig)
+func (g *Group) SkipAccessLog() *Group
 func (g *Group) Tag(tags ...string) *Group
 func (g *Group) Use(mw ...Middleware)
 func (h Headers) ResponseHeaders() http.Header
@@ -57,6 +58,7 @@ func (s *SSE) Comment(text string) error
 func (s *SSE) Event(name string, value any) error
 func (s OpsSettings) Apply(cfg OpsConfig) OpsConfig
 func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler
+func AccessLogWithConfig(logger *slog.Logger, cfg AccessLogConfig) func(http.Handler) http.Handler
 func BadRequest(detail string) error
 func BodyLimit(maxBytes int64) func(http.Handler) http.Handler
 func Conflict(detail string) error
@@ -80,6 +82,7 @@ func RequestID() func(http.Handler) http.Handler
 func RequestIDFromContext(ctx context.Context) string
 func RequirePermissions(permissions ...string) Option
 func SetHeaders(w http.ResponseWriter, headers http.Header) error
+func SkipAccessLog() Option
 func Status(code int) Option
 func Summary(s string) Option
 func Tags(tags ...string) Option
@@ -93,6 +96,27 @@ func WriteCSVTo(dst io.Writer, header []string, rows func(yield func([]string) e
 func WriteFile(w http.ResponseWriter, r *http.Request, path, downloadName string) error
 func WriteJSON(w http.ResponseWriter, status int, value any) error
 func WriteProblem(w http.ResponseWriter, r *http.Request, err error, logf func(string, ...any))
+type AccessLogConfig struct {
+	Level slog.Level
+
+	SkipPaths []string
+
+	Skip func(AccessLogInfo) bool
+
+	ExtraAttrs func(AccessLogInfo) []slog.Attr
+}
+type AccessLogInfo struct {
+	Request      *http.Request
+	RequestID    string
+	Method       string
+	Path         string
+	Status       int
+	Bytes        int
+	Duration     time.Duration
+	Panic        any
+	Operation    OperationMeta
+	HasOperation bool
+}
 type Attachment struct {
 	Filename    string
 	ContentType string
@@ -109,8 +133,7 @@ type CSV struct {
 	Rows     func(yield func([]string) error) error
 }
 type ContextKey[T any] struct {
-	name string
-	id   *contextKeyID
+	// unexported fields omitted
 }
 type ContextValidator interface {
 	Validate(context.Context) error
@@ -125,12 +148,7 @@ type FieldError struct {
 	Message  string `json:"message"`
 }
 type Group struct {
-	router     *Router
-	parent     *Group
-	prefix     string
-	middleware []Middleware
-	tags       []string
-	frozen     bool
+	// unexported fields omitted
 }
 type HTTPError struct {
 	Status int
@@ -160,14 +178,12 @@ type OperationMeta struct {
 	Status              int
 	NoContent           bool
 	Hidden              bool
-	Produces            []string
-	Params              []ParamMeta
-	Body                *BodyMeta
-	ResponseSchema      map[string]any
-	raw                 bool
-	responder           bool
-	inputType           reflect.Type
-	defaults            []defaultCheck
+
+	SkipAccessLog  bool
+	Produces       []string
+	Params         []ParamMeta
+	Body           *BodyMeta
+	ResponseSchema map[string]any
 }
 type OpsConfig struct {
 	LivePath    string
@@ -187,6 +203,8 @@ type OpsConfig struct {
 	Ready   http.HandlerFunc
 	OpenAPI http.HandlerFunc
 	Docs    http.Handler
+
+	LogAccess bool
 }
 type OpsSettings struct {
 	LivenessEnabled bool `env:"LIVENESS_ENABLED,default=true" envdoc:"Register the liveness endpoint."`
@@ -202,6 +220,8 @@ type OpsSettings struct {
 	OpenAPIPath string `env:"OPENAPI_PATH,default=/openapi.json" envdoc:"OpenAPI document path." validate:"startswith=/"`
 
 	DocsPath string `env:"DOCS_PATH,default=/docs/" envdoc:"Swagger UI path; a trailing slash is added when omitted." validate:"startswith=/"`
+
+	AccessLogEnabled bool `env:"ACCESS_LOG_ENABLED,default=false" envdoc:"Log operational endpoint requests in the access log."`
 }
 type Option func(*OperationMeta)
 type ParamMeta struct {
@@ -235,31 +255,13 @@ type Responder interface {
 	Respond(http.ResponseWriter, *http.Request) error
 }
 type Router struct {
-	mux             *http.ServeMux
-	logger          *slog.Logger
-	title           string
-	version         string
-	validate        *validator.Validate
-	validationTags  map[string]bool
-	middleware      []Middleware
-	ops             []OperationMeta
-	docs            DocSet
-	frozen          bool
-	opsMu           sync.Mutex
-	opsRevision     uint64
-	openapiJSON     []byte
-	openapiRevision uint64
+	// unexported fields omitted
 }
 type SSE struct {
-	w          http.ResponseWriter
-	controller *http.ResponseController
+	// unexported fields omitted
 }
 type StreamRegistry struct {
-	mu      sync.Mutex
-	next    uint64
-	closed  bool
-	closers map[uint64]func()
-	logger  *slog.Logger
+	// unexported fields omitted
 }
 type ValidationError struct {
 	Errors []FieldError
@@ -331,20 +333,13 @@ type File struct {
 	Filename    string
 	ContentType string
 	Size        int64
-	header      textproto.MIMEHeader
-	path        string
 }
 type Form struct {
 	Values map[string][]string
 	Files  []*File
-
-	dir    string
-	closed bool
 }
 type Parser struct {
-	cfg         Config
-	allowed     []mediaRange
-	contentType string
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/kernel/wshub
@@ -352,9 +347,7 @@ func (h *Hub) Serve(w http.ResponseWriter, req *http.Request, fn func(context.Co
 func NewHub(streams *kernel.StreamRegistry, logger *slog.Logger) *Hub
 func NormalizeError(err error) error
 type Hub struct {
-	streams  *kernel.StreamRegistry
-	logger   *slog.Logger
-	upgrader gorilla.Upgrader
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/logging
@@ -383,7 +376,6 @@ type Config struct {
 type Console int
 type Logger struct {
 	*slog.Logger
-	sink *sink
 }
 var ErrClosed = errors.New("logging output is closed")
 
@@ -410,12 +402,7 @@ type Config struct {
 	Token func(*http.Request) string
 }
 type MemoryStore struct {
-	mu         sync.Mutex
-	entries    map[string]time.Time
-	maxEntries int
-	puts       int
-	lastSweep  time.Time
-	now        func() time.Time
+	// unexported fields omitted
 }
 type Store interface {
 	Put(context.Context, string, time.Duration) error
@@ -429,8 +416,7 @@ func (s *Store) Exists(ctx context.Context, id string) (bool, error)
 func (s *Store) Put(ctx context.Context, id string, ttl time.Duration) error
 func NewStore(client goredis.UniversalClient, prefix string) (*Store, error)
 type Store struct {
-	client goredis.UniversalClient
-	prefix string
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/idempotency
@@ -452,8 +438,7 @@ type Config struct {
 	RequireKey       bool
 }
 type MemoryStore struct {
-	mu      sync.Mutex
-	records map[string]memoryRecord
+	// unexported fields omitted
 }
 type Record struct {
 	Fingerprint string      `json:"fingerprint"`
@@ -464,8 +449,7 @@ type Record struct {
 	CreatedAt   time.Time   `json:"created_at"`
 }
 type RedisStore struct {
-	client redis.UniversalClient
-	prefix string
+	// unexported fields omitted
 }
 type Store interface {
 	Reserve(context.Context, string, Record, time.Duration) (Record, bool, error)
@@ -555,8 +539,7 @@ type Observer struct {
 	SchedulesDispatched func(context.Context, int, time.Duration, error)
 }
 type Registry struct {
-	mu       sync.RWMutex
-	handlers map[string]registration
+	// unexported fields omitted
 }
 type Schedule struct {
 	Name     string
@@ -565,24 +548,7 @@ type Schedule struct {
 	Interval time.Duration
 }
 type Scheduler struct {
-	store     SchedulerStore
-	logger    *slog.Logger
-	cfg       SchedulerConfig
-	schedules []Schedule
-	registry  *Registry
-	observer  Observer
-
-	lifecycleMu sync.Mutex
-	mu          sync.Mutex
-	cancel      context.CancelFunc
-	done        chan struct{}
-	wg          sync.WaitGroup
-
-	running     atomic.Bool
-	failed      chan struct{}
-	failureMu   sync.Mutex
-	failureErr  error
-	failureOnce sync.Once
+	// unexported fields omitted
 }
 type SchedulerConfig struct {
 	Interval time.Duration `env:"INTERVAL,default=1s" envdoc:"Delay between due-schedule scans." validate:"gt=0"`
@@ -612,28 +578,7 @@ type Store interface {
 	Ping(context.Context) error
 }
 type Worker struct {
-	store      WorkerStore
-	registry   *Registry
-	logger     *slog.Logger
-	cfg        WorkerConfig
-	instanceID string
-	observer   Observer
-
-	lifecycleMu sync.Mutex
-	mu          sync.Mutex
-	claimCtx    context.Context
-	claim       context.CancelFunc
-	jobCtx      context.Context
-	job         context.CancelFunc
-	done        chan struct{}
-	wg          sync.WaitGroup
-
-	running     atomic.Bool
-	inFlight    atomic.Int64
-	failed      chan struct{}
-	failureMu   sync.Mutex
-	failureErr  error
-	failureOnce sync.Once
+	// unexported fields omitted
 }
 type WorkerConfig struct {
 	Concurrency int `env:"CONCURRENCY,default=4" envdoc:"Number of jobs claimed concurrently." validate:"gte=1"`
@@ -715,7 +660,7 @@ func (s *Store) RetryFailed(ctx context.Context, id string) (jobs.Job, error)
 func (s *Store) UpsertSchedule(ctx context.Context, schedule jobs.Schedule) error
 func NewStore(pool *pgxpool.Pool) *Store
 type Store struct {
-	pool *pgxpool.Pool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/jwtauth
@@ -731,11 +676,7 @@ type Config struct {
 	Leeway     time.Duration
 }
 type Verifier struct {
-	key        any
-	algorithms []string
-	issuer     string
-	audience   []string
-	leeway     time.Duration
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/migrate
@@ -756,17 +697,7 @@ type Migration struct {
 	FS   fs.FS
 }
 type Migrator struct {
-	url        string
-	enabled    bool
-	logger     *slog.Logger
-	driver     string
-	dialect    goose.Dialect
-	limit      int
-	migrations []Migration
-
-	mu      sync.Mutex
-	started bool
-	closed  bool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/pgmigrate
@@ -804,7 +735,7 @@ func (s *Store) Put(ctx context.Context, key string, body io.Reader, size int64,
 func (s *Store) Stat(ctx context.Context, key string) (objectstore.Object, error)
 func New(root string) (*Store, error)
 type Store struct {
-	root string
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/objectstore/s3store
@@ -827,9 +758,7 @@ type Config struct {
 	Prefix string
 }
 type Store struct {
-	client API
-	bucket string
-	prefix string
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/observability/oteltrace
@@ -843,9 +772,7 @@ type Config struct {
 	Skip func(*http.Request) bool
 }
 type Tracer struct {
-	tracer     trace.Tracer
-	propagator propagation.TextMapPropagator
-	skip       func(*http.Request) bool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/observability/prommetrics
@@ -861,10 +788,7 @@ type Config struct {
 	Skip func(*http.Request) bool
 }
 type Metrics struct {
-	requests  *prom.CounterVec
-	durations *prom.HistogramVec
-	inFlight  *prom.GaugeVec
-	skip      func(*http.Request) bool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/oidcauth
@@ -876,7 +800,7 @@ type Config struct {
 	HTTPClient *http.Client
 }
 type Verifier struct {
-	verifier *coreoidc.IDTokenVerifier
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/pgdb
@@ -888,10 +812,7 @@ func (p *Postgres) Stop(context.Context) error
 func IsUniqueViolation(err error) bool
 func New(ctx context.Context, databaseURL string) (*Postgres, error)
 type Postgres struct {
-	mu      sync.Mutex
-	pool    *pgxpool.Pool
-	started bool
-	closed  bool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/ratelimit
@@ -911,13 +832,7 @@ type Limiter interface {
 	Allow(context.Context, string) (Result, error)
 }
 type MemoryLimiter struct {
-	mu         sync.Mutex
-	limit      int
-	window     time.Duration
-	entries    map[string]memoryEntry
-	maxEntries int
-	lastSweep  time.Time
-	now        func() time.Time
+	// unexported fields omitted
 }
 type Result struct {
 	Allowed    bool
@@ -941,11 +856,7 @@ type Config struct {
 	RedisVersion string
 }
 type Limiter struct {
-	client   redis.UniversalClient
-	prefix   string
-	limit    int
-	window   time.Duration
-	strategy Strategy
+	// unexported fields omitted
 }
 type Strategy string
 
@@ -957,10 +868,7 @@ func (r *Redis) Start(ctx context.Context) error
 func (r *Redis) Stop(context.Context) error
 func New(redisURL string) (*Redis, error)
 type Redis struct {
-	mu      sync.Mutex
-	client  *goredis.Client
-	started bool
-	closed  bool
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/platform/redislock
@@ -981,14 +889,10 @@ type Config struct {
 	RedisVersion string
 }
 type Lock struct {
-	locker *Locker
-	key    string
-	token  string
+	// unexported fields omitted
 }
 type Locker struct {
-	client   redis.UniversalClient
-	prefix   string
-	strategy Strategy
+	// unexported fields omitted
 }
 type Strategy string
 var ErrLockLost = errors.New("redis lock lease was lost")
@@ -1025,8 +929,7 @@ func (s *Store) Find(token string) ([]byte, bool, error)
 func (s *Store) FindCtx(ctx context.Context, token string) ([]byte, bool, error)
 func NewStore(client goredis.UniversalClient, prefix string) (*Store, error)
 type Store struct {
-	client goredis.UniversalClient
-	prefix string
+	// unexported fields omitted
 }
 
 package github.com/plinth-go/plinth/runtime
@@ -1051,19 +954,7 @@ type FailureReporter interface {
 	Failure() error
 }
 type HTTP struct {
-	addr    string
-	handler http.Handler
-	logger  *slog.Logger
-	streams StreamCloser
-	config  httpServerSettings
-
-	mu         sync.Mutex
-	srv        *http.Server
-	listener   net.Listener
-	baseCancel context.CancelFunc
-	failed     chan struct{}
-	serveErr   error
-	closed     bool
+	// unexported fields omitted
 }
 type HTTPConfig struct {
 	ReadHeaderTimeout time.Duration
@@ -1089,13 +980,7 @@ type HTTPConfig struct {
 }
 type HTTPOption func(*httpServerSettings)
 type Runtime struct {
-	logger     *slog.Logger
-	timeout    time.Duration
-	components []Component
-
-	mu      sync.Mutex
-	running bool
-	ran     bool
+	// unexported fields omitted
 }
 type StreamCloser interface {
 	CloseStreams()

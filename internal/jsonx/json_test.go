@@ -35,6 +35,42 @@ func TestMarshalResponseMatchesLegacyEncoder(t *testing.T) {
 	}
 }
 
+func TestMarshalResponseBufferMatchesMarshalResponse(t *testing.T) {
+	type payload struct {
+		HTML    string            `json:"html"`
+		NilMap  map[string]string `json:"nil_map"`
+		NilList []int             `json:"nil_list"`
+		Ordered map[string]int    `json:"ordered"`
+	}
+	values := []any{
+		payload{},
+		payload{
+			HTML:    "<tag>&\u2028\u2029",
+			Ordered: map[string]int{"z": 1, "a": 2},
+		},
+		[]string{"one", "two"},
+		map[string]string{"b": "2", "a": "1"},
+	}
+	for _, value := range values {
+		want, err := MarshalResponse(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buffer, err := MarshalResponseBuffer(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := append([]byte(nil), buffer.Bytes()...)
+		buffer.Release()
+		if !bytes.Equal(got, want) {
+			t.Fatalf("buffered response = %q, want %q", got, want)
+		}
+		if len(got) == 0 || got[len(got)-1] != '\n' {
+			t.Fatalf("buffered response is not newline-terminated: %q", got)
+		}
+	}
+}
+
 func TestDecodeRejectsNullAtEveryDepthWithoutMutatingTarget(t *testing.T) {
 	type nested struct {
 		Value string `json:"value"`

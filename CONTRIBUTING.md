@@ -13,15 +13,32 @@ commit with the Developer Certificate of Origin:
 git commit -s
 ```
 
+The repository includes a `prepare-commit-msg` hook that adds the sign-off for
+new commits using the configured author identity. Enable it after cloning:
+
+```sh
+make hooks
+```
+
+Merge commits are skipped by the hook and by the DCO check. `git commit -s`
+remains valid if you prefer to make the trailer explicit.
+
 Use your real name and a reachable email address in the sign-off. Do not add a
 separate copyright header unless a file already has one.
 
 CI verifies the sign-off rule on pull requests with `scripts/check-dco.sh`.
-Merge commits are skipped; bot commits must still include a sign-off. To run
-the same check locally before opening a PR:
+Bot commits must still include a sign-off. To run the same check locally before
+opening a PR:
 
 ```sh
 git fetch origin main
+DCO_BASE=origin/main make dco-check
+```
+
+If you rebase or otherwise rewrite history, reapply the sign-off before pushing:
+
+```sh
+git rebase --signoff origin/main
 DCO_BASE=origin/main make dco-check
 ```
 
@@ -70,6 +87,41 @@ are `Go 1.27.0 (minimum)` (Ubuntu), `Go 1.27.0 (macOS)`,
 license compatibility, GitHub Actions workflow linting, the regular test suite,
 `go vet`, both binary builds, the full race suite, both fuzz targets, and
 `govulncheck`.
+
+## Pull requests
+
+Keep each pull request focused on one problem. Explain the chosen approach,
+validation performed, and any public API, wire-contract, default-security, or
+dependency-boundary impact. Add or update tests for behavior changes and refresh
+generated files when their inputs change.
+
+The required checks are `Go 1.27.0 (minimum)`, `Go 1.27.0 (macOS)`,
+`Go 1.27.0 (Windows)`, and the Ubuntu `Release gate`. Do not merge while any
+required check is failing, any commit lacks a matching DCO sign-off, or the
+generated-file check is dirty.
+
+## Agent guides
+
+`AGENTS.md` is committed and contains project-wide, durable instructions for AI
+agents. Do not put personal preferences, machine-specific paths, credentials, or
+one-off task notes in it.
+
+Personal or machine-specific instructions belong in `AGENTS.override.md`, which
+this repository gitignores. Each contributor can keep their own toolchain paths,
+workflow habits, and local exceptions there without committing them.
+
+Keep both files short and actionable: exact commands, file paths, and constraints
+rather than long architecture essays. Project-wide rules belong in `AGENTS.md`,
+README, `CONTRIBUTING.md`, or tests; personal rules must not weaken public
+contracts.
+
+Codex reads only one instruction file per directory, so a root
+`AGENTS.override.md` replaces `AGENTS.md`. Use the user-level
+`~/.codex/AGENTS.md` for personal rules that must layer with project guidance, or
+place the override in a nested working directory.
+
+Application-level agent guidance may narrow framework usage for that codebase,
+but it must not change Plinth's public contracts or dependency boundaries.
 
 ## Dependency updates and generated files
 

@@ -1,5 +1,7 @@
 // Command plinth-docgen extracts operation and field descriptions from Go
 // comments into a generated manifest. The runtime never reads source files.
+// An optional include file limits scanning to selected module-relative package
+// directories and their descendants.
 package main
 
 import (
@@ -13,6 +15,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -35,6 +38,7 @@ func cli(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	root := flags.String("root", ".", "module root")
 	out := flags.String("out", "internal/generated/docs_gen.go", "generated Go file")
+	includeFile := flags.String("include-file", "", "optional file listing module-relative package directories to scan")
 	check := flags.Bool("check", false, "verify that the generated file is current")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -47,7 +51,7 @@ func cli(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if err := runWithOutput(*root, *out, *check, stdout); err != nil {
+	if err := runWithOutput(*root, *out, *includeFile, *check, stdout); err != nil {
 		fmt.Fprintln(stderr, "plinth-docgen:", err)
 		return 1
 	}
@@ -55,15 +59,19 @@ func cli(args []string, stdout, stderr io.Writer) int {
 }
 
 func run(root, out string, check bool) error {
-	return runWithOutput(root, out, check, os.Stdout)
+	return runWithOutput(root, out, "", check, os.Stdout)
 }
 
-func runWithOutput(root, out string, check bool, stdout io.Writer) error {
+func runWithOutput(root, out, includeFile string, check bool, stdout io.Writer) error {
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return err
 	}
 	module, err := readModulePath(filepath.Join(rootAbs, "go.mod"))
+	if err != nil {
+		return err
+	}
+	includes, err := readIncludes(rootAbs, includeFile)
 	if err != nil {
 		return err
 	}
@@ -94,14 +102,17 @@ func runWithOutput(root, out string, check bool, stdout io.Writer) error {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
+		rel, err := filepath.Rel(rootAbs, filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		if !packageIncluded(filepath.ToSlash(rel), includes) {
+			return nil
+		}
 
 		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
 			return fmt.Errorf("parse %s: %w", path, err)
-		}
-		rel, err := filepath.Rel(rootAbs, filepath.Dir(path))
-		if err != nil {
-			return err
 		}
 		pkgPath := module
 		if rel != "." {
@@ -184,6 +195,65 @@ func runWithOutput(root, out string, check bool, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "plinth-docgen: %d operations, %d fields -> %s\n", len(operations), len(fields), out)
 	return nil
+}
+
+func readIncludes(root, name string) ([]string, error) {
+	if name == "" {
+		return nil, nil
+	}
+	path := name
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read include file %s: %w", path, err)
+	}
+
+	var includes []string
+	seen := make(map[string]bool)
+	for lineNumber, raw := range strings.Split(string(data), "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		include := pathpkg.Clean(filepath.ToSlash(line))
+		if pathpkg.IsAbs(include) || include == ".." || strings.HasPrefix(include, "../") {
+			return nil, fmt.Errorf("include file %s:%d: package path %q must be module-relative", path, lineNumber+1, line)
+		}
+		if seen[include] {
+			return nil, fmt.Errorf("include file %s:%d: duplicate package path %q", path, lineNumber+1, include)
+		}
+		dir := root
+		if include != "." {
+			dir = filepath.Join(root, filepath.FromSlash(include))
+		}
+		info, err := os.Stat(dir)
+		if err != nil {
+			return nil, fmt.Errorf("include file %s:%d: %w", path, lineNumber+1, err)
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("include file %s:%d: %q is not a directory", path, lineNumber+1, include)
+		}
+		seen[include] = true
+		includes = append(includes, include)
+	}
+	if len(includes) == 0 {
+		return nil, fmt.Errorf("include file %s contains no package paths", path)
+	}
+	return includes, nil
+}
+
+func packageIncluded(rel string, includes []string) bool {
+	if len(includes) == 0 {
+		return true
+	}
+	for _, include := range includes {
+		if rel == include || strings.HasPrefix(rel, include+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func render(operations map[string]operation, fields map[string]string) ([]byte, error) {

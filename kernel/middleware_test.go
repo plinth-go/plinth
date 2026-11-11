@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -165,6 +166,39 @@ func TestRequestIDPreventsLogInjection(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "request_id="+contextID) {
 		t.Fatalf("logs do not contain generated request ID %q: %q", contextID, logs.String())
+	}
+}
+
+func TestRequestIDGeneratorProducesUniqueSafeIDs(t *testing.T) {
+	generator := newRequestIDGenerator()
+	seen := make(map[string]struct{}, 1024)
+	for range 1024 {
+		id := generator.next()
+		if !validRequestID(id) {
+			t.Fatalf("generated unsafe request ID %q", id)
+		}
+		if _, duplicate := seen[id]; duplicate {
+			t.Fatalf("duplicate request ID %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
+func TestRequestIDNestedStateDoesNotOverwriteOuterRequest(t *testing.T) {
+	outer := &requestContext{Context: context.Background(), requestID: "outer-id"}
+	request := httptest.NewRequest(http.MethodGet, "/nested", nil).WithContext(outer)
+	var innerID string
+	handler := RequestID()(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		innerID = RequestIDFromContext(r.Context())
+	}))
+
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	if innerID == "" || innerID == outer.requestID {
+		t.Fatalf("inner request ID = %q, outer = %q", innerID, outer.requestID)
+	}
+	if got := RequestIDFromContext(request.Context()); got != outer.requestID {
+		t.Fatalf("outer request ID = %q, want %q", got, outer.requestID)
 	}
 }
 

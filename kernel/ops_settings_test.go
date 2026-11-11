@@ -20,7 +20,7 @@ func TestOpsSettingsApply(t *testing.T) {
 		Live:        func(http.ResponseWriter, *http.Request) {},
 	}
 
-	for bits := 0; bits < 8; bits++ {
+	for bits := 0; bits < 16; bits++ {
 		settings := OpsSettings{
 			LivenessEnabled:  bits&1 != 0,
 			LivenessPath:     "/healthz",
@@ -29,6 +29,7 @@ func TestOpsSettingsApply(t *testing.T) {
 			OpenAPIEnabled:   bits&4 != 0,
 			OpenAPIPath:      "/spec.json",
 			DocsPath:         "/manual/",
+			AccessLogEnabled: bits&8 != 0,
 		}
 		t.Run(fmt.Sprintf("%03b", bits), func(t *testing.T) {
 			got := settings.Apply(base)
@@ -40,6 +41,9 @@ func TestOpsSettingsApply(t *testing.T) {
 			}
 			if got.DisableOpenAPI != !settings.OpenAPIEnabled {
 				t.Fatalf("DisableOpenAPI = %t, OpenAPIEnabled = %t", got.DisableOpenAPI, settings.OpenAPIEnabled)
+			}
+			if got.LogAccess != settings.AccessLogEnabled {
+				t.Fatalf("LogAccess = %t, AccessLogEnabled = %t", got.LogAccess, settings.AccessLogEnabled)
 			}
 			if got.LivePath != settings.LivenessPath || got.ReadyPath != settings.ReadinessPath ||
 				got.OpenAPIPath != settings.OpenAPIPath || got.DocsPath != settings.DocsPath ||
@@ -64,5 +68,8 @@ func TestDefaultOpsSettingsEnablesEverything(t *testing.T) {
 	}
 	if got.LivePath != settings.LivenessPath || got.ReadyPath != settings.ReadinessPath || got.OpenAPIPath != settings.OpenAPIPath || got.DocsPath != settings.DocsPath {
 		t.Fatalf("default settings paths were not applied: %#v", got)
+	}
+	if settings.AccessLogEnabled || got.LogAccess {
+		t.Fatalf("default operational access logging is enabled: settings=%#v config=%#v", settings, got)
 	}
 }

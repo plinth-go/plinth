@@ -37,4 +37,10 @@ handler := corsMiddleware(router) // CORS 在 router 外层
 - session/CSRF 在依赖 cookie 的业务之前。
 - 按 IP 限流放在认证前；按用户限流放在认证后。
 - `Recover` 要覆盖后续中间件和 handler；`AccessLog` 应看到最终状态。
+- 需要跳过健康检查、调整级别或附加租户等字段时，用
+  `kernel.AccessLogWithConfig`：`SkipPaths` 只做精确路径匹配，前缀、状态码等动态
+  条件写在 `Skip` 中；路由或 Group 可用 `kernel.SkipAccessLog()` /
+  `group.SkipAccessLog()` 声明式跳过。`Hidden()` 只影响 OpenAPI，不等于跳过访问日志。
+- Ops 端点默认不记录访问日志；需要时设置 `OpsConfig.LogAccess=true` 或
+  `OPS_ACCESS_LOG_ENABLED=true`，但 `Group.SkipAccessLog` 仍然优先。
 - 按需启用，不要因为“安全”把所有中间件无条件加到所有路由。

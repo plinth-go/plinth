@@ -17,11 +17,52 @@ var errResponderContract = errors.New("typed responder contract violation")
 type contentTypeGuard struct {
 	w           http.ResponseWriter
 	req         *http.Request
-	produces    []string
+	produces    compiledProduces
 	logger      *slog.Logger
-	baseHeaders http.Header
+	baseHeaders headerSnapshot
 	decided     bool
 	failed      bool
+}
+
+type compiledProduces struct {
+	raw        []string
+	mediaTypes []string
+}
+
+func compileProduces(raw []string) compiledProduces {
+	compiled := compiledProduces{
+		raw:        raw,
+		mediaTypes: make([]string, len(raw)),
+	}
+	for i, value := range raw {
+		mediaType, _, err := mime.ParseMediaType(value)
+		if err == nil {
+			compiled.mediaTypes[i] = strings.ToLower(mediaType)
+		}
+	}
+	return compiled
+}
+
+func (p compiledProduces) singleConcrete() bool {
+	if len(p.mediaTypes) != 1 {
+		return false
+	}
+	mediaType := p.mediaTypes[0]
+	return mediaType != "" && mediaType != "*/*" && !strings.HasSuffix(mediaType, "/*")
+}
+
+func (p compiledProduces) matches(actual string) bool {
+	actualType, _, err := mime.ParseMediaType(actual)
+	if err != nil {
+		return false
+	}
+	actualType = strings.ToLower(actualType)
+	for _, declaredType := range p.mediaTypes {
+		if declaredType != "" && mediaTypeValueMatches(actualType, declaredType) {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *contentTypeGuard) Header() http.Header { return g.w.Header() }
@@ -86,30 +127,19 @@ func (g *contentTypeGuard) decide() bool {
 
 	contentType := g.Header().Get("Content-Type")
 	if contentType == "" {
-		if len(g.produces) == 1 {
-			if isConcreteMediaType(g.produces[0]) {
-				g.Header().Set("Content-Type", g.produces[0])
-				return true
-			}
-			return g.reject(fmt.Errorf("typed Responder must set a concrete Content-Type for wildcard produces %q", g.produces[0]))
-		}
-		return g.reject(fmt.Errorf("typed Responder did not set Content-Type; declared produces: %v", g.produces))
-	}
-	for _, declared := range g.produces {
-		if mediaTypeMatches(contentType, declared) {
+		if g.produces.singleConcrete() {
+			g.Header().Set("Content-Type", g.produces.raw[0])
 			return true
 		}
+		if len(g.produces.raw) == 1 {
+			return g.reject(fmt.Errorf("typed Responder must set a concrete Content-Type for wildcard produces %q", g.produces.raw[0]))
+		}
+		return g.reject(fmt.Errorf("typed Responder did not set Content-Type; declared produces: %v", g.produces.raw))
 	}
-	return g.reject(fmt.Errorf("typed Responder wrote Content-Type %q, not declared in produces %v", contentType, g.produces))
-}
-
-func isConcreteMediaType(value string) bool {
-	mediaType, _, err := mime.ParseMediaType(value)
-	if err != nil {
-		return false
+	if g.produces.matches(contentType) {
+		return true
 	}
-	mediaType = strings.ToLower(mediaType)
-	return mediaType != "*/*" && !strings.HasSuffix(mediaType, "/*")
+	return g.reject(fmt.Errorf("typed Responder wrote Content-Type %q, not declared in produces %v", contentType, g.produces.raw))
 }
 
 func (g *contentTypeGuard) reject(err error) bool {
@@ -129,7 +159,7 @@ func (g *contentTypeGuard) fail(err error, message string) {
 }
 
 func (g *contentTypeGuard) restoreHeaders() {
-	resetHeaders(g.w.Header(), g.baseHeaders)
+	g.baseHeaders.restore(g.w.Header())
 }
 
 func mediaTypeMatches(actual, declared string) bool {
@@ -143,6 +173,10 @@ func mediaTypeMatches(actual, declared string) bool {
 	}
 	actualType = strings.ToLower(actualType)
 	declaredType = strings.ToLower(declaredType)
+	return mediaTypeValueMatches(actualType, declaredType)
+}
+
+func mediaTypeValueMatches(actualType, declaredType string) bool {
 	switch {
 	case declaredType == "*/*":
 		return true

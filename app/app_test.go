@@ -228,6 +228,7 @@ func TestEmbeddedOpsSettingsUsesNestedEnvKeys(t *testing.T) {
 		prefix + "_OPS_OPENAPI_ENABLED=true\n",
 		prefix + "_OPS_OPENAPI_PATH=/openapi.json\n",
 		prefix + "_OPS_DOCS_PATH=/docs/\n",
+		prefix + "_OPS_ACCESS_LOG_ENABLED=false\n",
 	} {
 		if !strings.Contains(string(template), want) {
 			t.Fatalf("missing %q in:\n%s", want, template)
@@ -236,11 +237,12 @@ func TestEmbeddedOpsSettingsUsesNestedEnvKeys(t *testing.T) {
 
 	t.Setenv(prefix+"_OPS_READINESS_ENABLED", "false")
 	t.Setenv(prefix+"_OPS_LIVENESS_PATH", "/healthz")
+	t.Setenv(prefix+"_OPS_ACCESS_LOG_ENABLED", "true")
 	var cfg config
 	if err := LoadEnv(context.Background(), &cfg, WithEnvPrefix(prefix)); err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Ops.LivenessEnabled || cfg.Ops.ReadinessEnabled || !cfg.Ops.OpenAPIEnabled || cfg.Ops.LivenessPath != "/healthz" {
+	if !cfg.Ops.LivenessEnabled || cfg.Ops.ReadinessEnabled || !cfg.Ops.OpenAPIEnabled || !cfg.Ops.AccessLogEnabled || cfg.Ops.LivenessPath != "/healthz" {
 		t.Fatalf("Ops = %#v", cfg.Ops)
 	}
 }

@@ -9,7 +9,7 @@
 - 除专门演示错误处理外，示例默认 `error` 为 `nil`，用 `_` 接收；只保留必要的返回值传播。
 - 单个代码块尽量控制在 15–35 行；超出时拆成“接入 + 声明”或“配置 + 装配”两个块。
 - 框架自己的类型、函数名和 tag 应尽量保持真实。示例与公开 API 冲突时，以
-  [`../README.md`](../README.md) 和公开 API 快照为准。
+  [`../README.zh-CN.md`](../README.zh-CN.md) 和公开 API 快照为准。
 - 除 `hello/` 和 `tls-http2/` 外，示例不进入 `go test`、构建或发布二进制的依赖闭包。
 - 真实业务应用继续放在独立仓库；`plinth-example` 是集成参考应用，不是官方学习入口。
 
@@ -31,6 +31,7 @@ AI 或新维护者不需要跨仓库拼接上下文，也不会把参考应用�
 | 只接入限流（内存/Redis） | [ratelimit.md](ratelimit.md) |
 | 只接入 Session / Cookie | [session.md](session.md) |
 | 安全中间件组合顺序 | [security.md](security.md) |
+| 独立 listener 采集 pprof 与查看火焰图 | [pprof.md](pprof.md) |
 | 使用者如何测试自己的业务 handler 和中间件接线 | [testing.md](testing.md) |
 | Postgres、Redis、jobs、对象存储等 opt-in 能力 | [optional-platform.md](optional-platform.md) |
 
@@ -41,7 +42,7 @@ AI 或新维护者不需要跨仓库拼接上下文，也不会把参考应用�
 - 做公网 API：`security.md` → `jwt-postgres-authz.md` / `authz.md` →
   `csrf.md` / `session.md` / `cors.md` / `ratelimit.md` → `../SECURITY.md`
 - 只补一个能力：直接打开索引里的单篇，不需要先读安全总览
-- 接入基础设施：`optional-platform.md` → `../README.md` 的“可选能力”
+- 接入基础设施：`optional-platform.md` → `../README.zh-CN.md` 的“功能概览”
 - AI/代码代理：先读 [../llms.txt](../llms.txt)，再按任务读取上述单篇
 
 ## 编写规则

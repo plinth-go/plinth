@@ -27,26 +27,26 @@ func TestHTTPAllocationBudgets(t *testing.T) {
 	router := benchmarkRouter(t)
 	writer := newBenchmarkWriter()
 	getRequest := benchmarkRequest(http.MethodGet, "/items/42?q=alpha", nil)
-	assertAllocationBudget(t, "typed GET", 9, func() {
+	assertAllocationBudget(t, "typed GET", 7, func() {
 		writer.reset()
 		router.ServeHTTP(writer, getRequest)
 	})
 
 	noQueryRequest := benchmarkRequest(http.MethodGet, "/items/42", nil)
-	assertAllocationBudget(t, "typed GET without query", 9, func() {
+	assertAllocationBudget(t, "typed GET without query", 7, func() {
 		writer.reset()
 		router.ServeHTTP(writer, noQueryRequest)
 	})
 
 	staticRequest := benchmarkRequest(http.MethodGet, "/static", nil)
-	assertAllocationBudget(t, "typed static GET", 6, func() {
+	assertAllocationBudget(t, "typed static GET", 5, func() {
 		writer.reset()
 		router.ServeHTTP(writer, staticRequest)
 	})
 
 	headerRequest := benchmarkRequest(http.MethodGet, "/bound/42?q=alpha", nil)
 	headerRequest.Header.Set("X-Tenant", "acme")
-	assertAllocationBudget(t, "typed GET with header", 9, func() {
+	assertAllocationBudget(t, "typed GET with header", 7, func() {
 		writer.reset()
 		router.ServeHTTP(writer, headerRequest)
 	})
@@ -54,7 +54,7 @@ func TestHTTPAllocationBudgets(t *testing.T) {
 	postBody := []byte(`{"name":"alpha","count":2}`)
 	body := newBenchmarkBody(postBody)
 	postRequest := persistentJSONRequest(http.MethodPost, "/items", body)
-	assertAllocationBudget(t, "typed JSON POST", 15, func() {
+	assertAllocationBudget(t, "typed JSON POST", 13, func() {
 		writer.reset()
 		body.Reset(postBody)
 		router.ServeHTTP(writer, postRequest)
@@ -63,14 +63,14 @@ func TestHTTPAllocationBudgets(t *testing.T) {
 	invalidBody := []byte(`{"name":"","count":0}`)
 	invalid := newBenchmarkBody(invalidBody)
 	invalidRequest := persistentJSONRequest(http.MethodPost, "/items", invalid)
-	assertAllocationBudget(t, "validation failure", 38, func() {
+	assertAllocationBudget(t, "validation failure", 34, func() {
 		writer.reset()
 		invalid.Reset(invalidBody)
 		router.ServeHTTP(writer, invalidRequest)
 	})
 
 	encodeFailureRequest := benchmarkRequest(http.MethodGet, "/encode-failure", nil)
-	assertAllocationBudget(t, "JSON encode failure", 18, func() {
+	assertAllocationBudget(t, "JSON encode failure", 15, func() {
 		writer.reset()
 		router.ServeHTTP(writer, encodeFailureRequest)
 	})
@@ -87,7 +87,7 @@ func TestHTTPMiddlewareAllocationBudget(t *testing.T) {
 	request := benchmarkRequest(http.MethodGet, "/items/42?q=alpha", nil)
 	writer := newBenchmarkWriter()
 
-	assertAllocationBudget(t, "middleware chain", 22, func() {
+	assertAllocationBudget(t, "middleware chain", 16, func() {
 		writer.reset()
 		router.ServeHTTP(writer, request)
 	})
@@ -106,7 +106,7 @@ func TestHTTPBodyLimitAllocationBudget(t *testing.T) {
 
 	body := newBenchmarkBody(payload)
 	declared := persistentJSONRequest(http.MethodPost, "/items", body)
-	assertAllocationBudget(t, "declared body-limit rejection", 18, func() {
+	assertAllocationBudget(t, "declared body-limit rejection", 15, func() {
 		writer.reset()
 		body.Reset(payload)
 		router.ServeHTTP(writer, declared)
@@ -115,7 +115,7 @@ func TestHTTPBodyLimitAllocationBudget(t *testing.T) {
 	streamedBody := newBenchmarkBody(payload)
 	streamed := persistentJSONRequest(http.MethodPost, "/items", streamedBody)
 	streamed.ContentLength = -1
-	assertAllocationBudget(t, "streamed body-limit rejection", 22, func() {
+	assertAllocationBudget(t, "streamed body-limit rejection", 20, func() {
 		writer.reset()
 		streamedBody.Reset(payload)
 		router.ServeHTTP(writer, streamed)
