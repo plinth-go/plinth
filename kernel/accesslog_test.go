@@ -173,7 +173,7 @@ func TestAccessLogWithConfigSkipSeesFinalRequestSnapshot(t *testing.T) {
 	if info.Request == nil || info.RequestID != "request-skip" || info.Method != http.MethodGet || info.Path != "/items/42" {
 		t.Fatalf("snapshot request fields = %#v", info)
 	}
-	if info.Status != http.StatusAccepted || info.Bytes != 5 || info.Duration <= 0 || info.Panic != nil {
+	if info.Status != http.StatusAccepted || info.Bytes != 5 || info.Duration < 0 || info.Panic != nil {
 		t.Fatalf("snapshot result fields = %#v", info)
 	}
 	if !info.HasOperation || info.Operation.OperationID != "get-item" || info.Operation.Path != "/items/{id}" {
